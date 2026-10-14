@@ -1,0 +1,129 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+@layer base {
+  :root {
+    --font-display: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+    --font-sans: 'Public Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+    --font-mono: 'JetBrains Mono', monospace;
+  }
+
+  body {
+    font-family: var(--font-sans);
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  }
+
+  h1, h2, h3, h4, .font-display {
+    font-family: var(--font-display);
+    text-wrap: balance;
+  }
+
+  .font-mono, .tabular-nums {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+/* ============================================================================
+ * Sky Blue Theme Custom Styling
+ * ============================================================================ */
+html[data-theme="skyblue"],
+[data-theme="skyblue"] body {
+  background-color: #F0F9FF;
+  color: #0C4A6E;
+}
+
+[data-theme="skyblue"] .theme-bg-base {
+  background-color: #F0F9FF;
+}
+
+[data-theme="skyblue"] .theme-card-bg {
+  background-color: #FFFFFF;
+  border-color: #BAE6FD;
+}
+
+[data-theme="skyblue"] .theme-accent-btn {
+  background-color: #0284C7;
+  color: #FFFFFF;
+}
+
+[data-theme="skyblue"] .theme-accent-btn:hover {
+  background-color: #0369A1;
+}
+
+[data-theme="skyblue"] .theme-accent-text {
+  color: #0284C7;
+}
+
+[data-theme="skyblue"] .theme-accent-border {
+  border-color: #0284C7;
+}
+
+/* ============================================================================
+ * Orange Theme Custom Styling
+ * ============================================================================ */
+html[data-theme="orange"],
+[data-theme="orange"] body {
+  background-color: #FFF7ED;
+  color: #431407;
+}
+
+[data-theme="orange"] .theme-bg-base {
+  background-color: #FFF7ED;
+}
+
+[data-theme="orange"] .theme-card-bg {
+  background-color: #FFFFFF;
+  border-color: #FED7AA;
+}
+
+[data-theme="orange"] .theme-accent-btn {
+  background-color: #EA580C;
+  color: #FFFFFF;
+}
+
+[data-theme="orange"] .theme-accent-btn:hover {
+  background-color: #C2410C;
+}
+
+[data-theme="orange"] .theme-accent-text {
+  color: #EA580C;
+}
+
+[data-theme="orange"] .theme-accent-border {
+  border-color: #EA580C;
+}
+
+/* ============================================================================
+ * Developer Name Animation & Gradient
+ * ============================================================================ */
+@keyframes nameShimmer {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
+.developer-name-gradient {
+  background: linear-gradient(120deg, #1e40af 0%, #2563eb 25%, #4f46e5 50%, #0284c7 75%, #2563eb 100%);
+  background-size: 300% 300%;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: nameShimmer 6s ease-in-out infinite;
+}
+
+.dark .developer-name-gradient {
+  background: linear-gradient(120deg, #60a5fa 0%, #818cf8 25%, #38bdf8 50%, #a78bfa 75%, #60a5fa 100%);
+  background-size: 300% 300%;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: nameShimmer 6s ease-in-out infinite;
+}
+
+
