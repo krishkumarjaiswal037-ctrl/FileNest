@@ -59,6 +59,7 @@ export default function Upload({
       <div className="max-w-4xl mx-auto">
         <UploadBox
           subjectsBySemester={subjectsBySemester}
+          isAdmin={isAdmin}
           onSubjectsUpdated={onSubjectsUpdated}
           onUploadSuccess={onUploadSuccess}
           notify={notify}

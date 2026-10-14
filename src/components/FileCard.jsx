@@ -11,7 +11,7 @@ import {
   Check,
   X
 } from 'lucide-react';
-import { formatFileSize } from '../lib/supabaseService';
+import { formatFileSize, getClientUploaderId } from '../lib/supabaseService';
 import { SEMESTER_LIST, FILE_CATEGORIES } from '../data/subjects';
 
 /**
@@ -34,6 +34,12 @@ export default function FileCard({
   const [imgError, setImgError] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [isConfirmingDelete, setIsConfirmingDelete] = useState(false);
+
+  const currentUploader = getClientUploaderId();
+  const isOwner = Boolean(
+    file && file.uploader_id && file.uploader_id === currentUploader
+  );
+  const canDelete = isAdmin || isOwner;
 
   // Edit form state
   const [editTitle, setEditTitle] = useState(file.title);
@@ -313,27 +319,27 @@ export default function FileCard({
               </button>
 
               {isAdmin && (
-                <>
-                  <button
-                    type="button"
-                    onClick={() => setIsEditing(true)}
-                    aria-label={`Edit details for ${file.title}`}
-                    className="p-2 text-slate-500 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors"
-                    title="Rename / Edit details (Admin Only)"
-                  >
-                    <Pencil className="w-4 h-4" />
-                  </button>
+                <button
+                  type="button"
+                  onClick={() => setIsEditing(true)}
+                  aria-label={`Edit details for ${file.title}`}
+                  className="p-2 text-slate-500 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors"
+                  title="Rename / Edit details (Admin Only)"
+                >
+                  <Pencil className="w-4 h-4" />
+                </button>
+              )}
 
-                  <button
-                    type="button"
-                    onClick={() => setIsConfirmingDelete(true)}
-                    aria-label={`Delete ${file.title}`}
-                    className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/40 rounded-lg transition-colors"
-                    title="Delete file (Admin Only)"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                </>
+              {canDelete && (
+                <button
+                  type="button"
+                  onClick={() => setIsConfirmingDelete(true)}
+                  aria-label={`Delete ${file.title}`}
+                  className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/40 rounded-lg transition-colors"
+                  title={isAdmin ? 'Delete file (Admin)' : 'Delete your uploaded file'}
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
               )}
             </>
           )}
@@ -488,26 +494,30 @@ export default function FileCard({
               </button>
             </div>
 
-            {isAdmin && (
+            {(isAdmin || canDelete) && (
               <div className="flex items-center gap-1">
-                <button
-                  type="button"
-                  onClick={() => setIsEditing(true)}
-                  aria-label="Edit details"
-                  title="Rename / Edit details (Admin Only)"
-                  className="p-1.5 text-slate-500 hover:text-slate-900 dark:hover:text-white hover:bg-slate-200/60 dark:hover:bg-slate-700 rounded-lg transition-colors"
-                >
-                  <Pencil className="w-3.5 h-3.5" />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setIsConfirmingDelete(true)}
-                  aria-label="Delete file"
-                  title="Delete file (Admin Only)"
-                  className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/40 rounded-lg transition-colors"
-                >
-                  <Trash2 className="w-3.5 h-3.5" />
-                </button>
+                {isAdmin && (
+                  <button
+                    type="button"
+                    onClick={() => setIsEditing(true)}
+                    aria-label="Edit details"
+                    title="Rename / Edit details (Admin Only)"
+                    className="p-1.5 text-slate-500 hover:text-slate-900 dark:hover:text-white hover:bg-slate-200/60 dark:hover:bg-slate-700 rounded-lg transition-colors"
+                  >
+                    <Pencil className="w-3.5 h-3.5" />
+                  </button>
+                )}
+                {canDelete && (
+                  <button
+                    type="button"
+                    onClick={() => setIsConfirmingDelete(true)}
+                    aria-label="Delete file"
+                    title={isAdmin ? 'Delete file (Admin)' : 'Delete your uploaded file'}
+                    className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/40 rounded-lg transition-colors"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                )}
               </div>
             )}
           </>

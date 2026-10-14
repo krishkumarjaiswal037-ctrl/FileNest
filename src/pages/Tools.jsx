@@ -28,7 +28,12 @@ import {
   saveSubjectsForSemester,
   resetSubjectsToDefault
 } from '../data/subjects';
-import { getRecentlyViewedIds } from '../lib/supabaseService';
+import {
+  getRecentlyViewedIds,
+  addSubjectToSupabase,
+  deleteSubjectFromSupabase
+} from '../lib/supabaseService';
+import { Shield, Lock } from 'lucide-react';
 
 const TOOL_TABS = [
   { id: 'cgpa', label: 'CGPA Calculator', icon: Calculator },
@@ -50,6 +55,7 @@ const TOOL_TABS = [
 export default function Tools({
   files,
   subjectsBySemester,
+  isAdmin = false,
   onSubjectsUpdated,
   onPreview,
   onDownload,
@@ -87,10 +93,21 @@ export default function Tools({
   // Curriculum editor handlers
   const currentSemSubjects = subjectsBySemester[editingSemester] || [];
 
-  const handleAddCurriculumSubject = (e) => {
+  const handleAddCurriculumSubject = async (e) => {
     e.preventDefault();
+    if (!isAdmin) {
+      if (notify) notify('Permission Denied: Only users with an Admin role can add subjects.', 'error');
+      return;
+    }
     const trimmed = newSubjectInput.trim();
     if (!trimmed) return;
+
+    try {
+      await addSubjectToSupabase(editingSemester, trimmed, true);
+    } catch (err) {
+      console.warn('Supabase add subject note:', err);
+    }
+
     const updated = saveSubjectsForSemester(editingSemester, [
       ...currentSemSubjects,
       trimmed
@@ -100,7 +117,18 @@ export default function Tools({
     if (notify) notify(`Added "${trimmed}" to Semester ${editingSemester}.`, 'success');
   };
 
-  const handleRemoveCurriculumSubject = (subjToRemove) => {
+  const handleRemoveCurriculumSubject = async (subjToRemove) => {
+    if (!isAdmin) {
+      if (notify) notify('Permission Denied: Only users with an Admin role can delete subjects.', 'error');
+      return;
+    }
+
+    try {
+      await deleteSubjectFromSupabase(editingSemester, subjToRemove, true);
+    } catch (err) {
+      console.warn('Supabase delete subject note:', err);
+    }
+
     const nextList = currentSemSubjects.filter((s) => s !== subjToRemove);
     const updated = saveSubjectsForSemester(editingSemester, nextList);
     onSubjectsUpdated(updated);
@@ -108,6 +136,10 @@ export default function Tools({
   };
 
   const handleResetCurriculum = () => {
+    if (!isAdmin) {
+      if (notify) notify('Permission Denied: Only users with an Admin role can reset subjects.', 'error');
+      return;
+    }
     const defaults = resetSubjectsToDefault();
     onSubjectsUpdated(defaults);
     if (notify) notify('Reset all 8 semesters to default B.Tech CSE curriculum.', 'info');
@@ -310,14 +342,16 @@ export default function Tools({
                 </p>
               </div>
 
-              <button
-                type="button"
-                onClick={handleResetCurriculum}
-                className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-medium text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 rounded-xl transition-colors"
-              >
-                <RotateCcw className="w-3.5 h-3.5" />
-                <span>Restore Default CSE Curriculum</span>
-              </button>
+              {isAdmin && (
+                <button
+                  type="button"
+                  onClick={handleResetCurriculum}
+                  className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-medium text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 rounded-xl transition-colors"
+                >
+                  <RotateCcw className="w-3.5 h-3.5" />
+                  <span>Restore Default CSE Curriculum</span>
+                </button>
+              )}
             </div>
 
             {/* Semester Selector Buttons */}
@@ -338,23 +372,32 @@ export default function Tools({
               ))}
             </div>
 
-            {/* Add Subject to Current Semester */}
-            <form onSubmit={handleAddCurriculumSubject} className="flex gap-3">
-              <input
-                type="text"
-                value={newSubjectInput}
-                onChange={(e) => setNewSubjectInput(e.target.value)}
-                placeholder={`Add new subject to Semester ${editingSemester} (e.g. Cloud Native Engineering)...`}
-                className="flex-1 px-3.5 py-2.5 text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white focus:outline-none focus:border-[#2563EB]"
-              />
-              <button
-                type="submit"
-                className="inline-flex items-center gap-1.5 px-5 py-2.5 text-xs font-semibold text-white bg-[#2563EB] hover:bg-[#1E3A8A] rounded-xl transition-colors whitespace-nowrap shrink-0"
-              >
-                <Plus className="w-4 h-4" />
-                <span>Add Subject</span>
-              </button>
-            </form>
+            {/* Add Subject to Current Semester - STRICT ADMIN ONLY */}
+            {isAdmin ? (
+              <form onSubmit={handleAddCurriculumSubject} className="flex gap-3">
+                <input
+                  type="text"
+                  value={newSubjectInput}
+                  onChange={(e) => setNewSubjectInput(e.target.value)}
+                  placeholder={`Add new subject to Semester ${editingSemester} (e.g. Cloud Native Engineering)...`}
+                  className="flex-1 px-3.5 py-2.5 text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white focus:outline-none focus:border-[#2563EB]"
+                />
+                <button
+                  type="submit"
+                  className="inline-flex items-center gap-1.5 px-5 py-2.5 text-xs font-semibold text-white bg-[#2563EB] hover:bg-[#1E3A8A] rounded-xl transition-colors whitespace-nowrap shrink-0"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>Add Subject</span>
+                </button>
+              </form>
+            ) : (
+              <div className="flex items-center gap-3 p-4 rounded-xl bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-900/60 text-slate-700 dark:text-slate-300">
+                <Lock className="w-5 h-5 text-[#2563EB] dark:text-blue-400 shrink-0" />
+                <div className="text-xs">
+                  <span className="font-semibold text-slate-900 dark:text-white">Admin-Restricted Permissions:</span> Only users with an Admin role can add or delete subjects within a semester. Log in to the Admin Portal to manage curriculum subjects.
+                </div>
+              </div>
+            )}
 
             {/* Subject List */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
@@ -366,14 +409,17 @@ export default function Tools({
                   <span className="text-sm font-medium text-slate-800 dark:text-slate-200 truncate">
                     {subj}
                   </span>
-                  <button
-                    type="button"
-                    onClick={() => handleRemoveCurriculumSubject(subj)}
-                    aria-label={`Remove ${subj}`}
-                    className="p-1 text-slate-400 hover:text-red-600 rounded"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
+                  {isAdmin && (
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveCurriculumSubject(subj)}
+                      aria-label={`Remove ${subj}`}
+                      title="Delete subject (Admin Only)"
+                      className="p-1 text-slate-400 hover:text-red-600 rounded transition-colors"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  )}
                 </div>
               ))}
             </div>

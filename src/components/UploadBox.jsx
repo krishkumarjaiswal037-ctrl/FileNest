@@ -15,7 +15,7 @@ import {
   FILE_CATEGORIES,
   addCustomSubjectToSemester
 } from '../data/subjects';
-import { uploadStudyFile, formatFileSize } from '../lib/supabaseService';
+import { uploadStudyFile, formatFileSize, addSubjectToSupabase } from '../lib/supabaseService';
 
 const MAX_FILE_SIZE_BYTES = 50 * 1024 * 1024; // 50 MB
 const ACCEPTED_MIME_TYPES = {
@@ -30,11 +30,12 @@ const ACCEPTED_MIME_TYPES = {
 
 /**
  * Reusable Multi-File UploadBox Component (src/components/UploadBox.jsx)
- * Supports drag-and-drop, file validation (PDF, JPG, JPEG, PNG, WEBP up to 20 MB),
- * individual file progress bars, dynamic semester-wise subject selector, and custom subject creation.
+ * Supports drag-and-drop, file validation (PDF, JPG, JPEG, PNG, WEBP, MP4, WEBM up to 50 MB),
+ * individual file progress bars, dynamic semester-wise subject selector, and admin-only custom subject creation.
  */
 export default function UploadBox({
   subjectsBySemester,
+  isAdmin = false,
   onSubjectsUpdated,
   onUploadSuccess,
   notify
@@ -106,11 +107,20 @@ export default function UploadBox({
     noClick: true
   });
 
-  const handleAddCustomSubject = () => {
+  const handleAddCustomSubject = async () => {
+    if (!isAdmin) {
+      if (notify) notify('Permission Denied: Only users with an Admin role can add subjects.', 'error');
+      return;
+    }
     const trimmed = customSubjectInput.trim();
     if (!trimmed) {
       if (notify) notify('Please enter a subject name.', 'error');
       return;
+    }
+    try {
+      await addSubjectToSupabase(semester, trimmed, true);
+    } catch (err) {
+      console.warn('Supabase add subject note:', err);
     }
     const updatedMap = addCustomSubjectToSemester(semester, trimmed);
     if (onSubjectsUpdated) onSubjectsUpdated(updatedMap);
@@ -247,7 +257,7 @@ export default function UploadBox({
             </select>
           </div>
 
-          {/* Dynamic Subject Selector + Custom Subject Option */}
+          {/* Dynamic Subject Selector + Custom Subject Option (Admin Only) */}
           <div>
             <div className="flex items-center justify-between mb-2">
               <label
@@ -256,17 +266,19 @@ export default function UploadBox({
               >
                 Subject (Sem {semester}) *
               </label>
-              <button
-                type="button"
-                onClick={() => setIsAddingCustomSubject((prev) => !prev)}
-                className="inline-flex items-center gap-1 text-xs font-medium text-[#2563EB] dark:text-blue-400 hover:underline"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                <span>{isAddingCustomSubject ? 'Select existing' : 'Add custom subject'}</span>
-              </button>
+              {isAdmin && (
+                <button
+                  type="button"
+                  onClick={() => setIsAddingCustomSubject((prev) => !prev)}
+                  className="inline-flex items-center gap-1 text-xs font-medium text-[#2563EB] dark:text-blue-400 hover:underline"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>{isAddingCustomSubject ? 'Select existing' : 'Add custom subject'}</span>
+                </button>
+              )}
             </div>
 
-            {isAddingCustomSubject ? (
+            {isAdmin && isAddingCustomSubject ? (
               <div className="flex items-center gap-2">
                 <input
                   type="text"
@@ -290,7 +302,9 @@ export default function UploadBox({
                 value={subject}
                 onChange={(e) => {
                   if (e.target.value === '__ADD_CUSTOM__') {
-                    setIsAddingCustomSubject(true);
+                    if (isAdmin) {
+                      setIsAddingCustomSubject(true);
+                    }
                   } else {
                     setSubject(e.target.value);
                   }
@@ -302,7 +316,9 @@ export default function UploadBox({
                     {subj}
                   </option>
                 ))}
-                <option value="__ADD_CUSTOM__">+ Add custom subject...</option>
+                {isAdmin && (
+                  <option value="__ADD_CUSTOM__">+ Add custom subject (Admin)...</option>
+                )}
               </select>
             )}
           </div>

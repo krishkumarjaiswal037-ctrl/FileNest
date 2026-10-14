@@ -11,7 +11,7 @@ import Library from './pages/Library';
 import Tools from './pages/Tools';
 import About from './pages/About';
 import Admin from './pages/Admin';
-import { getSubjectsBySemester } from './data/subjects';
+import { getSubjectsBySemester, saveAllSubjectsMap } from './data/subjects';
 import { getAdminSession } from './lib/adminAuth';
 import {
   fetchAllFiles,
@@ -25,7 +25,9 @@ import {
   isSupabaseConfigured,
   checkSupabaseStatus,
   SUPABASE_PROJECT_ID,
-  syncLocalFilesToSupabase
+  syncLocalFilesToSupabase,
+  fetchSubjectsFromSupabase,
+  getClientUploaderId
 } from './lib/supabaseService';
 
 export type ThemeMode = 'white' | 'darkblue' | 'skyblue' | 'orange';
@@ -143,34 +145,26 @@ export default function App() {
     }
   }, [theme]);
 
-  // Initial load of files from Supabase / Persistent Vault + Auto-Sync to Supabase
+  // Initial load: Data strictly loaded directly from Supabase database (no auto-seeding loops)
   useEffect(() => {
     let mounted = true;
     async function load() {
       setIsLoading(true);
       try {
-        const [data, status] = await Promise.all([
+        const [data, status, dbSubjects] = await Promise.all([
           fetchAllFiles(),
-          checkSupabaseStatus()
+          checkSupabaseStatus(),
+          fetchSubjectsFromSupabase()
         ]);
 
         if (mounted) {
           setFiles(data);
           setSupabaseStatus(status);
-        }
-
-        // Automatically sync any offline/locally uploaded documents to Supabase Table Editor
-        syncLocalFilesToSupabase().then(async (syncRes) => {
-          if (mounted && syncRes.synced > 0) {
-            notify(`Synced ${syncRes.synced} uploaded document(s) directly into your Supabase table editor!`, 'success');
-            const fresh = await fetchAllFiles();
-            const freshStatus = await checkSupabaseStatus();
-            if (mounted) {
-              setFiles(fresh);
-              setSupabaseStatus(freshStatus);
-            }
+          if (dbSubjects) {
+            setSubjectsBySemester(dbSubjects);
+            saveAllSubjectsMap(dbSubjects);
           }
-        }).catch(() => {});
+        }
       } catch (err: any) {
         if (mounted) notify(err?.message || 'Failed to load files', 'error');
       } finally {
@@ -265,17 +259,22 @@ export default function App() {
   };
 
   const handleDeleteConfirm = async (file: any) => {
-    if (!getAdminSession()) {
-      notify('Access Denied: Only the administrator has permission to delete files or videos.', 'error');
+    const isCurrentAdmin = Boolean(getAdminSession());
+    const currentUploader = getClientUploaderId();
+    const isOwner = Boolean(file && file.uploader_id && file.uploader_id === currentUploader);
+
+    if (!isCurrentAdmin && !isOwner) {
+      notify('Access Denied: Regular users can only delete their own uploaded files.', 'error');
       return;
     }
+
     try {
-      await deleteStudyFile(file);
+      await deleteStudyFile(file, isCurrentAdmin);
       setFiles((prev) => prev.filter((f) => f.id !== file.id));
       if (previewFile && previewFile.id === file.id) {
         setPreviewFile(null);
       }
-      notify(`Deleted "${file.title}" from FileNest.`, 'info');
+      notify(`Deleted "${file.title}" successfully.`, 'info');
     } catch (err: any) {
       notify(err?.message || 'Failed to delete file', 'error');
     }
@@ -374,6 +373,7 @@ export default function App() {
                 <Tools
                   files={files}
                   subjectsBySemester={subjectsBySemester}
+                  isAdmin={isAdmin}
                   onSubjectsUpdated={setSubjectsBySemester}
                   onPreview={handleOpenPreview}
                   onDownload={handleDownload}

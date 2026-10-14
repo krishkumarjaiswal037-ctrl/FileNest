@@ -88,28 +88,38 @@ export const FILE_CATEGORIES = [
 
 export const SEMESTER_LIST = [1, 2, 3, 4, 5, 6, 7, 8];
 
-const CUSTOM_SUBJECTS_STORAGE_KEY = "studyvault_cse_subjects_v1";
+const CUSTOM_SUBJECTS_STORAGE_KEY = "studyvault_cse_subjects_v2";
 
 /**
- * Retrieve semester-wise subjects (merges default CSE subjects with user edits)
+ * Retrieve semester-wise subjects.
+ * Never regenerates deleted subjects if user emptied a semester.
  */
 export function getSubjectsBySemester() {
   try {
     const saved = localStorage.getItem(CUSTOM_SUBJECTS_STORAGE_KEY);
     if (saved) {
       const parsed = JSON.parse(saved);
-      const merged = { ...DEFAULT_SUBJECTS_BY_SEMESTER };
-      for (const sem of SEMESTER_LIST) {
-        if (Array.isArray(parsed[sem]) && parsed[sem].length > 0) {
-          merged[sem] = parsed[sem];
+      if (parsed && typeof parsed === 'object') {
+        const result = {};
+        for (const sem of SEMESTER_LIST) {
+          if (Array.isArray(parsed[sem])) {
+            result[sem] = parsed[sem];
+          } else {
+            result[sem] = [];
+          }
         }
+        return result;
       }
-      return merged;
     }
   } catch (err) {
     console.error("Failed to read custom subjects:", err);
   }
-  return { ...DEFAULT_SUBJECTS_BY_SEMESTER };
+  // Return standard default subjects initially if no custom/database record exists
+  const initial = {};
+  for (const sem of SEMESTER_LIST) {
+    initial[sem] = [...(DEFAULT_SUBJECTS_BY_SEMESTER[sem] || [])];
+  }
+  return initial;
 }
 
 /**
@@ -119,14 +129,14 @@ export function saveSubjectsForSemester(semester, subjectList) {
   const current = getSubjectsBySemester();
   const updated = {
     ...current,
-    [Number(semester)]: Array.from(new Set(subjectList.map((s) => s.trim()).filter(Boolean)))
+    [Number(semester)]: Array.from(new Set((subjectList || []).map((s) => s.trim()).filter(Boolean)))
   };
   localStorage.setItem(CUSTOM_SUBJECTS_STORAGE_KEY, JSON.stringify(updated));
   return updated;
 }
 
 /**
- * Add a single custom subject to a semester
+ * Add a single custom subject to a semester (Admin-Guarded)
  */
 export function addCustomSubjectToSemester(semester, newSubject) {
   const clean = newSubject.trim();
@@ -140,11 +150,38 @@ export function addCustomSubjectToSemester(semester, newSubject) {
 }
 
 /**
+ * Remove a single subject from a semester (Admin-Guarded)
+ */
+export function removeCustomSubjectFromSemester(semester, subjectToRemove) {
+  const clean = subjectToRemove.trim().toLowerCase();
+  const current = getSubjectsBySemester();
+  const existing = current[Number(semester)] || [];
+  const updatedList = existing.filter((s) => s.trim().toLowerCase() !== clean);
+  return saveSubjectsForSemester(semester, updatedList);
+}
+
+/**
+ * Store the complete subjects map (e.g. synchronized from Supabase)
+ */
+export function saveAllSubjectsMap(subjectsMap) {
+  const cleanMap = {};
+  for (const sem of SEMESTER_LIST) {
+    cleanMap[sem] = Array.isArray(subjectsMap[sem]) ? subjectsMap[sem] : [];
+  }
+  localStorage.setItem(CUSTOM_SUBJECTS_STORAGE_KEY, JSON.stringify(cleanMap));
+  return cleanMap;
+}
+
+/**
  * Reset subjects to default B.Tech CSE curriculum
  */
 export function resetSubjectsToDefault() {
-  localStorage.removeItem(CUSTOM_SUBJECTS_STORAGE_KEY);
-  return { ...DEFAULT_SUBJECTS_BY_SEMESTER };
+  const initial = {};
+  for (const sem of SEMESTER_LIST) {
+    initial[sem] = [...(DEFAULT_SUBJECTS_BY_SEMESTER[sem] || [])];
+  }
+  localStorage.setItem(CUSTOM_SUBJECTS_STORAGE_KEY, JSON.stringify(initial));
+  return initial;
 }
 
 /**
