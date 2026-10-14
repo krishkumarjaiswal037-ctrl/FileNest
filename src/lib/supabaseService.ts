@@ -1034,6 +1034,16 @@ CREATE TABLE IF NOT EXISTS public.files (
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- Ensure all columns exist even if public.files was previously created without them
+ALTER TABLE public.files ADD COLUMN IF NOT EXISTS user_id UUID REFERENCES auth.users(id) DEFAULT auth.uid();
+ALTER TABLE public.files ADD COLUMN IF NOT EXISTS uploader_id TEXT;
+ALTER TABLE public.files ADD COLUMN IF NOT EXISTS storage_path TEXT;
+ALTER TABLE public.files ADD COLUMN IF NOT EXISTS is_favorite BOOLEAN DEFAULT FALSE;
+ALTER TABLE public.files ADD COLUMN IF NOT EXISTS tags TEXT[] DEFAULT '{}';
+ALTER TABLE public.files ADD COLUMN IF NOT EXISTS file_type TEXT DEFAULT 'pdf';
+ALTER TABLE public.files ADD COLUMN IF NOT EXISTS mime_type TEXT DEFAULT 'application/pdf';
+ALTER TABLE public.files ADD COLUMN IF NOT EXISTS file_size BIGINT DEFAULT 0;
+
 -- Support video, pdf, image in check constraint
 DO $$
 BEGIN
@@ -1062,6 +1072,19 @@ CREATE TABLE IF NOT EXISTS public.notes (
   uploader_id TEXT,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- Ensure all columns exist even if public.notes was previously created without them
+ALTER TABLE public.notes ADD COLUMN IF NOT EXISTS user_id UUID REFERENCES auth.users(id) DEFAULT auth.uid();
+ALTER TABLE public.notes ADD COLUMN IF NOT EXISTS uploader_id TEXT;
+ALTER TABLE public.notes ADD COLUMN IF NOT EXISTS storage_path TEXT;
+ALTER TABLE public.notes ADD COLUMN IF NOT EXISTS is_favorite BOOLEAN DEFAULT FALSE;
+ALTER TABLE public.notes ADD COLUMN IF NOT EXISTS tags TEXT[] DEFAULT '{}';
+ALTER TABLE public.notes ADD COLUMN IF NOT EXISTS file_type TEXT DEFAULT 'pdf';
+ALTER TABLE public.notes ADD COLUMN IF NOT EXISTS mime_type TEXT DEFAULT 'application/pdf';
+ALTER TABLE public.notes ADD COLUMN IF NOT EXISTS file_size BIGINT DEFAULT 0;
+
+-- Also ensure subjects table has created_by
+ALTER TABLE public.subjects ADD COLUMN IF NOT EXISTS created_by UUID REFERENCES auth.users(id);
 
 -- Enable RLS
 ALTER TABLE public.files ENABLE ROW LEVEL SECURITY;
