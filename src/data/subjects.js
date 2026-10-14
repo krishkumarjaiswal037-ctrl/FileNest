@@ -102,10 +102,10 @@ export function getSubjectsBySemester() {
       if (parsed && typeof parsed === 'object') {
         const result = {};
         for (const sem of SEMESTER_LIST) {
-          if (Array.isArray(parsed[sem])) {
+          if (Array.isArray(parsed[sem]) && parsed[sem].length > 0) {
             result[sem] = parsed[sem];
           } else {
-            result[sem] = [];
+            result[sem] = [...(DEFAULT_SUBJECTS_BY_SEMESTER[sem] || [])];
           }
         }
         return result;
@@ -131,7 +131,14 @@ export function saveSubjectsForSemester(semester, subjectList) {
     ...current,
     [Number(semester)]: Array.from(new Set((subjectList || []).map((s) => s.trim()).filter(Boolean)))
   };
-  localStorage.setItem(CUSTOM_SUBJECTS_STORAGE_KEY, JSON.stringify(updated));
+  try {
+    localStorage.setItem(CUSTOM_SUBJECTS_STORAGE_KEY, JSON.stringify(updated));
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('filenest_subjects_updated', { detail: updated }));
+    }
+  } catch (e) {
+    console.warn("Storage save failed:", e);
+  }
   return updated;
 }
 
@@ -164,11 +171,21 @@ export function removeCustomSubjectFromSemester(semester, subjectToRemove) {
  * Store the complete subjects map (e.g. synchronized from Supabase)
  */
 export function saveAllSubjectsMap(subjectsMap) {
+  const current = getSubjectsBySemester();
   const cleanMap = {};
   for (const sem of SEMESTER_LIST) {
-    cleanMap[sem] = Array.isArray(subjectsMap[sem]) ? subjectsMap[sem] : [];
+    cleanMap[sem] = Array.isArray(subjectsMap[sem]) && subjectsMap[sem].length > 0
+      ? subjectsMap[sem]
+      : (current[sem] || [...(DEFAULT_SUBJECTS_BY_SEMESTER[sem] || [])]);
   }
-  localStorage.setItem(CUSTOM_SUBJECTS_STORAGE_KEY, JSON.stringify(cleanMap));
+  try {
+    localStorage.setItem(CUSTOM_SUBJECTS_STORAGE_KEY, JSON.stringify(cleanMap));
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('filenest_subjects_updated', { detail: cleanMap }));
+    }
+  } catch (e) {
+    console.warn("Storage save failed:", e);
+  }
   return cleanMap;
 }
 

@@ -30,18 +30,18 @@ import {
   getClientUploaderId
 } from './lib/supabaseService';
 
-export type ThemeMode = 'white' | 'darkblue' | 'skyblue' | 'orange';
+export type ThemeMode = 'white' | 'darkblue';
 
 export default function App() {
   // Admin Session state (guards Delete & Edit controls)
   const [adminSession, setAdminSession] = useState(() => getAdminSession());
   const isAdmin = Boolean(adminSession);
 
-  // 4-Color Theme state: White, Dark Blue, Sky Blue, Orange
+  // 2-Color Theme state: White and Dark Blue
   const [theme, setTheme] = useState<ThemeMode>(() => {
     try {
       const saved = localStorage.getItem('filenest_theme') || localStorage.getItem('studyvault_theme');
-      if (saved === 'white' || saved === 'darkblue' || saved === 'skyblue' || saved === 'orange') {
+      if (saved === 'white' || saved === 'darkblue') {
         return saved as ThemeMode;
       }
       return localStorage.getItem('studyvault_dark_mode') === 'true' ? 'darkblue' : 'white';
@@ -57,6 +57,19 @@ export default function App() {
   const [subjectsBySemester, setSubjectsBySemester] = useState(() =>
     getSubjectsBySemester()
   );
+
+  // Synchronize subjects whenever updated anywhere across the app
+  useEffect(() => {
+    const handleSubjectsChange = (e: any) => {
+      if (e.detail && typeof e.detail === 'object') {
+        setSubjectsBySemester(e.detail);
+      }
+    };
+    window.addEventListener('filenest_subjects_updated', handleSubjectsChange);
+    return () => {
+      window.removeEventListener('filenest_subjects_updated', handleSubjectsChange);
+    };
+  }, []);
 
   // Supabase Backend Status state
   const [supabaseStatus, setSupabaseStatus] = useState<{
@@ -292,13 +305,9 @@ export default function App() {
       <div className={`min-h-screen flex flex-col transition-colors ${
         theme === 'darkblue'
           ? 'bg-[#0F172A] text-slate-100'
-          : theme === 'skyblue'
-          ? 'bg-[#F0F9FF] text-[#0C4A6E]'
-          : theme === 'orange'
-          ? 'bg-[#FFF7ED] text-[#431407]'
           : 'bg-white text-slate-800'
       }`}>
-        {/* Sticky Glassmorphism Navbar with 4-Theme Picker */}
+        {/* Sticky Glassmorphism Navbar with White & Dark Blue Theme Picker */}
         <Navbar
           theme={theme}
           onThemeChange={(newTheme: ThemeMode) => setTheme(newTheme)}
@@ -391,6 +400,11 @@ export default function App() {
                 <Admin
                   files={files}
                   isLoading={isLoading}
+                  subjectsBySemester={subjectsBySemester}
+                  onSubjectsUpdated={(updatedMap) => {
+                    setSubjectsBySemester(updatedMap);
+                    saveAllSubjectsMap(updatedMap);
+                  }}
                   onRefresh={async () => {
                     setIsLoading(true);
                     try {

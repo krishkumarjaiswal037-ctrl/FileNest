@@ -6,6 +6,8 @@ import { getAdminSession, logoutAdmin, AdminSession } from '../lib/adminAuth';
 interface AdminPageProps {
   files: any[];
   isLoading: boolean;
+  subjectsBySemester: { [sem: number]: string[] };
+  onSubjectsUpdated: (newMap: { [sem: number]: string[] }) => void;
   onRefresh: () => void;
   onPreview: (file: any) => void;
   onDownload: (file: any) => void;
@@ -16,6 +18,8 @@ interface AdminPageProps {
 export default function Admin({
   files,
   isLoading,
+  subjectsBySemester,
+  onSubjectsUpdated,
   onRefresh,
   onPreview,
   onDownload,
@@ -49,6 +53,8 @@ export default function Admin({
       session={session}
       files={files}
       isLoading={isLoading}
+      subjectsBySemester={subjectsBySemester}
+      onSubjectsUpdated={onSubjectsUpdated}
       onRefresh={onRefresh}
       onPreview={onPreview}
       onDownload={onDownload}

@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import { Link } from 'react-router-dom';
 import {
   FileText,
   Image as ImageIcon,
@@ -14,15 +15,26 @@ import {
   Shield,
   LogOut,
   RefreshCw,
-  HardDrive
+  HardDrive,
+  Plus,
+  UploadCloud,
+  GraduationCap
 } from 'lucide-react';
 import { AdminSession } from '../lib/adminAuth';
-import { formatFileSize, syncLocalFilesToSupabase } from '../lib/supabaseService';
+import {
+  formatFileSize,
+  syncLocalFilesToSupabase,
+  addSubjectToSupabase,
+  deleteSubjectFromSupabase
+} from '../lib/supabaseService';
+import { SEMESTER_LIST, saveSubjectsForSemester } from '../data/subjects';
 
 interface AdminDashboardProps {
   session: AdminSession;
   files: any[];
   isLoading: boolean;
+  subjectsBySemester: { [sem: number]: string[] };
+  onSubjectsUpdated: (newMap: { [sem: number]: string[] }) => void;
   onRefresh: () => void;
   onPreview: (file: any) => void;
   onDownload: (file: any) => void;
@@ -35,6 +47,8 @@ export default function AdminDashboard({
   session,
   files,
   isLoading,
+  subjectsBySemester = {},
+  onSubjectsUpdated,
   onRefresh,
   onPreview,
   onDownload,
@@ -42,6 +56,13 @@ export default function AdminDashboard({
   notify,
   onLogout
 }: AdminDashboardProps) {
+  // Navigation between Vault Files and Subject Management
+  const [activeAdminTab, setActiveAdminTab] = useState<'files' | 'curriculum'>('files');
+  const [editingSemester, setEditingSemester] = useState<number>(1);
+  const [newSubjectInput, setNewSubjectInput] = useState('');
+  const [isAddingSubject, setIsAddingSubject] = useState(false);
+  const [subjectSearch, setSubjectSearch] = useState('');
+
   // Filters & Search
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedSemester, setSelectedSemester] = useState<number | 'all'>('all');
@@ -52,6 +73,54 @@ export default function AdminDashboard({
   // Delete modal state
   const [fileToDelete, setFileToDelete] = useState<any | null>(null);
   const [isSyncing, setIsSyncing] = useState(false);
+
+  const handleAddSubject = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const trimmed = newSubjectInput.trim();
+    if (!trimmed) {
+      notify('Please enter a subject name.', 'error');
+      return;
+    }
+    const currentList = subjectsBySemester[editingSemester] || [];
+    if (currentList.some((s) => s.toLowerCase() === trimmed.toLowerCase())) {
+      notify(`"${trimmed}" is already in Semester ${editingSemester}.`, 'info');
+      return;
+    }
+
+    setIsAddingSubject(true);
+    try {
+      await addSubjectToSupabase(editingSemester, trimmed, true);
+    } catch (err: any) {
+      console.warn('Supabase add subject note:', err);
+    }
+
+    const updated = saveSubjectsForSemester(editingSemester, [...currentList, trimmed]);
+    if (onSubjectsUpdated) {
+      onSubjectsUpdated(updated);
+    }
+    setNewSubjectInput('');
+    setIsAddingSubject(false);
+    notify(
+      `Added "${trimmed}" to Semester ${editingSemester}. It is now immediately visible in the Upload dropdown!`,
+      'success'
+    );
+  };
+
+  const handleDeleteSubject = async (subjName: string) => {
+    const currentList = subjectsBySemester[editingSemester] || [];
+    try {
+      await deleteSubjectFromSupabase(editingSemester, subjName, true);
+    } catch (err: any) {
+      console.warn('Supabase delete subject note:', err);
+    }
+
+    const nextList = currentList.filter((s) => s !== subjName);
+    const updated = saveSubjectsForSemester(editingSemester, nextList);
+    if (onSubjectsUpdated) {
+      onSubjectsUpdated(updated);
+    }
+    notify(`Removed "${subjName}" from Semester ${editingSemester}.`, 'info');
+  };
 
   const handleSyncToSupabase = async () => {
     setIsSyncing(true);
@@ -324,11 +393,198 @@ export default function AdminDashboard({
         </div>
       </div>
 
-      {/* Main Table / Management Container */}
-      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-xs overflow-hidden">
-        {/* Table Controls / Filter Toolbar */}
-        <div className="p-5 border-b border-slate-200 dark:border-slate-800 space-y-4">
-          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+      {/* Admin Tab Switcher: Vault Files vs Semester Curriculum & Subjects */}
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 dark:border-slate-800 pb-2">
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setActiveAdminTab('files')}
+            className={`inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-semibold transition-all ${
+              activeAdminTab === 'files'
+                ? 'bg-[#2563EB] text-white shadow-xs'
+                : 'bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800'
+            }`}
+          >
+            <Database className="w-4 h-4" />
+            <span>Vault Documents ({files.length})</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveAdminTab('curriculum')}
+            className={`inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-semibold transition-all ${
+              activeAdminTab === 'curriculum'
+                ? 'bg-[#2563EB] text-white shadow-xs'
+                : 'bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800'
+            }`}
+          >
+            <BookOpen className="w-4 h-4" />
+            <span>Curriculum &amp; Subjects (8 Semesters)</span>
+          </button>
+        </div>
+
+        <Link
+          to="/upload"
+          className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-[#2563EB] dark:text-blue-400 bg-blue-50 dark:bg-blue-950/40 hover:bg-blue-100 dark:hover:bg-blue-900/40 rounded-xl transition-colors border border-blue-200/60 dark:border-blue-900/40"
+        >
+          <UploadCloud className="w-3.5 h-3.5" />
+          <span>Upload Notes &rarr;</span>
+        </Link>
+      </div>
+
+      {activeAdminTab === 'curriculum' ? (
+        /* Curriculum & Subjects Management View */
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-xs overflow-hidden">
+          <div className="p-6 border-b border-slate-200 dark:border-slate-800">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="p-1.5 rounded-lg bg-blue-50 dark:bg-blue-950/50 text-[#2563EB] dark:text-blue-400">
+                    <BookOpen className="w-5 h-5" />
+                  </span>
+                  <h2 className="text-lg font-bold text-slate-900 dark:text-white">
+                    Semester Curriculum &amp; Subjects Manager
+                  </h2>
+                </div>
+                <p className="mt-1 text-xs text-slate-600 dark:text-slate-400 max-w-2xl">
+                  Add or delete academic subjects per semester. Any subjects added here will immediately appear in the <strong>Upload</strong> section when choosing subjects.
+                </p>
+              </div>
+
+              <Link
+                to="/upload"
+                className="inline-flex items-center gap-2 px-4 py-2 text-xs font-semibold text-white bg-[#2563EB] hover:bg-[#1E3A8A] rounded-xl transition-colors whitespace-nowrap shrink-0 shadow-xs"
+              >
+                <UploadCloud className="w-4 h-4" />
+                <span>Go to Upload Page</span>
+              </Link>
+            </div>
+
+            {/* Semester Selector Tabs (Semesters 1 to 8) */}
+            <div className="mt-6 flex flex-wrap gap-2">
+              {SEMESTER_LIST.map((sem) => {
+                const count = (subjectsBySemester[sem] || []).length;
+                const isSelected = editingSemester === sem;
+                return (
+                  <button
+                    key={sem}
+                    type="button"
+                    onClick={() => setEditingSemester(sem)}
+                    className={`inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold border transition-all ${
+                      isSelected
+                        ? 'bg-[#2563EB] text-white border-[#2563EB] shadow-xs'
+                        : 'bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700'
+                    }`}
+                  >
+                    <span>Semester {sem}</span>
+                    <span
+                      className={`px-1.5 py-0.5 rounded-md text-[10px] font-mono ${
+                        isSelected
+                          ? 'bg-blue-700/60 text-white'
+                          : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300'
+                      }`}
+                    >
+                      {count}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Add Subject to Selected Semester Form */}
+          <div className="p-6 bg-slate-50/60 dark:bg-slate-800/40 border-b border-slate-200 dark:border-slate-800">
+            <h3 className="text-xs font-bold uppercase tracking-wider text-[#2563EB] dark:text-blue-400 mb-2">
+              Add New Subject to Semester {editingSemester}
+            </h3>
+            <form onSubmit={handleAddSubject} className="flex flex-col sm:flex-row gap-3">
+              <input
+                type="text"
+                value={newSubjectInput}
+                onChange={(e) => setNewSubjectInput(e.target.value)}
+                placeholder={`Enter new subject for Semester ${editingSemester} (e.g. Cloud Native Engineering, AI Ethics)...`}
+                className="flex-1 px-4 py-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-sm text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-hidden focus:ring-2 focus:ring-[#2563EB]"
+              />
+              <button
+                type="submit"
+                disabled={isAddingSubject || !newSubjectInput.trim()}
+                className="inline-flex items-center justify-center gap-2 px-5 py-2.5 text-xs font-semibold text-white bg-[#2563EB] hover:bg-[#1E3A8A] rounded-xl transition-colors disabled:opacity-50 whitespace-nowrap shadow-xs cursor-pointer"
+              >
+                <Plus className="w-4 h-4" />
+                <span>{isAddingSubject ? 'Adding...' : `Add to Semester ${editingSemester}`}</span>
+              </button>
+            </form>
+          </div>
+
+          {/* Current Semester's Subject List */}
+          <div className="p-6 space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+                Active Subjects in Semester {editingSemester} ({(subjectsBySemester[editingSemester] || []).length})
+              </h3>
+              <div className="relative max-w-xs w-full">
+                <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  value={subjectSearch}
+                  onChange={(e) => setSubjectSearch(e.target.value)}
+                  placeholder="Filter subjects in this semester..."
+                  className="w-full pl-8 pr-3 py-1.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-xs text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-hidden focus:ring-1 focus:ring-[#2563EB]"
+                />
+              </div>
+            </div>
+
+            {(() => {
+              const semList = subjectsBySemester[editingSemester] || [];
+              const filteredList = semList.filter((s) =>
+                s.toLowerCase().includes(subjectSearch.toLowerCase().trim())
+              );
+
+              if (filteredList.length === 0) {
+                return (
+                  <div className="text-center py-8 bg-slate-50 dark:bg-slate-800/40 border border-dashed border-slate-200 dark:border-slate-800 rounded-xl">
+                    <BookOpen className="w-8 h-8 text-slate-300 dark:text-slate-600 mx-auto mb-2" />
+                    <p className="text-xs text-slate-500 dark:text-slate-400">
+                      {subjectSearch ? 'No subjects matching filter.' : `No subjects found in Semester ${editingSemester}. Add one above!`}
+                    </p>
+                  </div>
+                );
+              }
+
+              return (
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                  {filteredList.map((subj) => (
+                    <div
+                      key={subj}
+                      className="group flex items-center justify-between p-3.5 bg-white dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/80 rounded-xl hover:border-[#2563EB] transition-colors"
+                    >
+                      <div className="flex items-center gap-2.5 min-w-0 pr-2">
+                        <GraduationCap className="w-4 h-4 text-[#2563EB] dark:text-blue-400 shrink-0" />
+                        <span className="text-xs font-semibold text-slate-800 dark:text-slate-200 truncate" title={subj}>
+                          {subj}
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteSubject(subj)}
+                        className="p-1 text-slate-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40 rounded-lg transition-colors shrink-0 cursor-pointer"
+                        title={`Delete "${subj}"`}
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              );
+            })()}
+          </div>
+        </div>
+      ) : (
+        /* Main Table / Files Management Container */
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-xs overflow-hidden">
+          {/* Table Controls / Filter Toolbar */}
+          <div className="p-5 border-b border-slate-200 dark:border-slate-800 space-y-4">
+            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
             <div>
               <h2 className="text-base font-bold text-slate-900 dark:text-white">
                 All Repository Files ({filteredFiles.length} of {files.length})
@@ -585,6 +841,7 @@ export default function AdminDashboard({
           </table>
         </div>
       </div>
+      )}
 
       {/* Delete Confirmation Modal */}
       {fileToDelete && (

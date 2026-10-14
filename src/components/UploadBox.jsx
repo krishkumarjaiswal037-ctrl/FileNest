@@ -55,13 +55,28 @@ export default function UploadBox({
 
   const currentSemesterSubjects = subjectsBySemester[semester] || [];
 
-  // Keep subject synced when semester changes
+  // Keep subject synced when semester changes or subjects update
   useEffect(() => {
     const list = subjectsBySemester[semester] || [];
-    if (list.length > 0 && !list.includes(subject)) {
-      setSubject(list[0]);
+    if (list.length > 0) {
+      if (!subject || !list.includes(subject)) {
+        setSubject(list[0]);
+      }
+    } else {
+      setSubject('');
     }
   }, [semester, subjectsBySemester, subject]);
+
+  // Listen for subjects updates dispatched from Admin or Tools
+  useEffect(() => {
+    const handleSubjectsSync = (e) => {
+      if (e.detail && onSubjectsUpdated) {
+        onSubjectsUpdated(e.detail);
+      }
+    };
+    window.addEventListener('filenest_subjects_updated', handleSubjectsSync);
+    return () => window.removeEventListener('filenest_subjects_updated', handleSubjectsSync);
+  }, [onSubjectsUpdated]);
 
   const onDrop = useCallback(
     (acceptedFiles, fileRejections) => {
@@ -311,11 +326,15 @@ export default function UploadBox({
                 }}
                 className="w-full px-3.5 py-2.5 text-sm bg-white dark:bg-slate-800 text-slate-900 dark:text-white border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-none focus:border-[#2563EB] transition-colors"
               >
-                {currentSemesterSubjects.map((subj) => (
-                  <option key={subj} value={subj}>
-                    {subj}
-                  </option>
-                ))}
+                {currentSemesterSubjects.length === 0 ? (
+                  <option value="">No subjects found for Semester {semester}</option>
+                ) : (
+                  currentSemesterSubjects.map((subj) => (
+                    <option key={subj} value={subj}>
+                      {subj}
+                    </option>
+                  ))
+                )}
                 {isAdmin && (
                   <option value="__ADD_CUSTOM__">+ Add custom subject (Admin)...</option>
                 )}

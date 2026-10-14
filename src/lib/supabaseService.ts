@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import { getSubjectsBySemester } from '../data/subjects';
 
 /**
  * ============================================================================
@@ -822,18 +823,23 @@ export async function fetchSubjectsFromSupabase(): Promise<{ [semester: number]:
       .order('name', { ascending: true });
 
     if (error) {
+      console.warn('Supabase subjects fetch notice:', error.message);
       return null;
     }
 
-    if (Array.isArray(data)) {
-      const map: { [sem: number]: string[] } = {};
-      for (let s = 1; s <= 8; s++) {
-        map[s] = [];
-      }
+    if (Array.isArray(data) && data.length > 0) {
+      // Merge with base subjects so default curriculum subjects are preserved alongside admin additions
+      const baseMap = getSubjectsBySemester();
+      const map: { [sem: number]: string[] } = { ...baseMap };
+
       data.forEach((row) => {
         const sem = Number(row.semester);
-        if (map[sem] && row.name && !map[sem].includes(row.name)) {
-          map[sem].push(row.name);
+        if (!map[sem]) map[sem] = [];
+        if (row.name && typeof row.name === 'string') {
+          const trimmed = row.name.trim();
+          if (trimmed && !map[sem].includes(trimmed)) {
+            map[sem].push(trimmed);
+          }
         }
       });
       return map;
