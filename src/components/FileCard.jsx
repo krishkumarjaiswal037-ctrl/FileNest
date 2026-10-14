@@ -40,6 +40,13 @@ export default function FileCard({
     file && file.uploader_id && file.uploader_id === currentUploader
   );
   const canDelete = isAdmin || isOwner;
+  const canEdit = Boolean(onRenameSave);
+
+  const isRecentlyUploaded = Boolean(
+    file &&
+    file.created_at &&
+    Date.now() - new Date(file.created_at).getTime() < 7 * 24 * 60 * 60 * 1000
+  );
 
   // Edit form state
   const [editTitle, setEditTitle] = useState(file.title);
@@ -197,12 +204,12 @@ export default function FileCard({
   // List View Presentation
   if (viewMode === 'list') {
     return (
-      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:border-[#2563EB] dark:hover:border-blue-500 rounded-2xl p-4 transition-colors flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+      <div className="group bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:border-[#2563EB] dark:hover:border-blue-500 rounded-2xl p-4 hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div className="flex items-start gap-4 min-w-0 flex-1">
           <button
             type="button"
             onClick={() => onPreview(file)}
-            className="w-12 h-12 rounded-xl bg-[#EFF6FF] dark:bg-slate-800 text-[#2563EB] dark:text-blue-400 flex items-center justify-center shrink-0 overflow-hidden border border-blue-100 dark:border-slate-700"
+            className="w-12 h-12 rounded-xl bg-[#EFF6FF] dark:bg-slate-800 text-[#2563EB] dark:text-blue-400 flex items-center justify-center shrink-0 overflow-hidden border border-blue-100 dark:border-slate-700 group-hover:scale-105 transition-transform"
             title="Preview file"
           >
             {file.file_type === 'image' && file.file_url && !imgError ? (
@@ -232,6 +239,15 @@ export default function FileCard({
               <span className="truncate">{file.subject}</span>
               <span aria-hidden="true">·</span>
               <span>{file.category}</span>
+              {isRecentlyUploaded && (
+                <>
+                  <span aria-hidden="true">·</span>
+                  <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/70 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800 animate-pulse shrink-0">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                    Uploaded Note
+                  </span>
+                </>
+              )}
             </div>
 
             <button
@@ -318,13 +334,13 @@ export default function FileCard({
                 <Star className={`w-4 h-4 ${file.is_favorite ? 'fill-current' : ''}`} />
               </button>
 
-              {isAdmin && (
+              {canEdit && (
                 <button
                   type="button"
                   onClick={() => setIsEditing(true)}
                   aria-label={`Edit details for ${file.title}`}
-                  className="p-2 text-slate-500 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors"
-                  title="Rename / Edit details (Admin Only)"
+                  className="p-2 text-slate-500 hover:text-[#2563EB] dark:hover:text-blue-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors"
+                  title="Rename / Edit details"
                 >
                   <Pencil className="w-4 h-4" />
                 </button>
@@ -350,7 +366,7 @@ export default function FileCard({
 
   // Default Grid View Presentation
   return (
-    <article className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:border-[#2563EB] dark:hover:border-blue-500 rounded-2xl overflow-hidden shadow-2xs hover:shadow-md transition-all duration-150 flex flex-col justify-between">
+    <article className="group bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:border-[#2563EB] dark:hover:border-blue-500 rounded-2xl overflow-hidden shadow-2xs hover:shadow-xl hover:-translate-y-1.5 transition-all duration-300 flex flex-col justify-between">
       <div>
         {/* Thumbnail / Preview Header */}
         <div
@@ -388,6 +404,14 @@ export default function FileCard({
                 {file.file_type === 'pdf' ? 'PDF Document' : file.file_type === 'video' ? 'Video Lecture' : 'Study Image'}
               </span>
             </div>
+          )}
+
+          {/* Animated upload tag for recently uploaded notes */}
+          {isRecentlyUploaded && (
+            <span className="absolute top-3 left-3 inline-flex items-center gap-1.5 text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-600/95 text-white shadow-xs backdrop-blur-md animate-pulse">
+              <span className="w-1.5 h-1.5 rounded-full bg-white" />
+              Uploaded
+            </span>
           )}
 
           {/* Favorite button in top-right corner */}
@@ -494,15 +518,15 @@ export default function FileCard({
               </button>
             </div>
 
-            {(isAdmin || canDelete) && (
+            {(canEdit || canDelete) && (
               <div className="flex items-center gap-1">
-                {isAdmin && (
+                {canEdit && (
                   <button
                     type="button"
                     onClick={() => setIsEditing(true)}
                     aria-label="Edit details"
-                    title="Rename / Edit details (Admin Only)"
-                    className="p-1.5 text-slate-500 hover:text-slate-900 dark:hover:text-white hover:bg-slate-200/60 dark:hover:bg-slate-700 rounded-lg transition-colors"
+                    title="Rename / Edit file details"
+                    className="p-1.5 text-slate-500 hover:text-[#2563EB] dark:hover:text-blue-400 hover:bg-slate-200/60 dark:hover:bg-slate-700 rounded-lg transition-colors"
                   >
                     <Pencil className="w-3.5 h-3.5" />
                   </button>

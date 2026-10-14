@@ -60,8 +60,7 @@ export default function Navbar({
     { label: 'Home', to: '/' },
     { label: 'Upload', to: '/upload' },
     { label: 'Library', to: '/library' },
-    { label: 'Tools', to: '/tools' },
-    { label: 'Admin', to: '/admin' }
+    { label: 'Tools', to: '/tools' }
   ];
 
   const currentTheme = THEME_OPTIONS.find((t) => t.id === theme) || THEME_OPTIONS[0];
@@ -73,6 +72,11 @@ export default function Navbar({
       onToggleDarkMode();
     }
     setThemeDropdownOpen(false);
+  };
+
+  const handleToggleTwoThemes = (e) => {
+    // If shift or secondary click, toggle immediately between the two colors; otherwise toggle menu
+    setThemeDropdownOpen((prev) => !prev);
   };
 
   return (
@@ -90,7 +94,7 @@ export default function Navbar({
           </span>
         </Link>
 
-        {/* Navigation Links */}
+        {/* Navigation Links (Admin removed from navbar, preserved in footer) */}
         <nav aria-label="Main Navigation" className="hidden md:flex items-center gap-6 lg:gap-7 text-sm font-medium">
           {navItems.map((item) => (
             <NavLink
@@ -106,35 +110,41 @@ export default function Navbar({
               }
             >
               {item.label}
-              {item.label === 'Admin' && (
-                <span className="text-[10px] px-1.5 py-0.5 rounded-full font-bold bg-[#EFF6FF] dark:bg-blue-950 text-[#2563EB] dark:text-blue-400 border border-blue-200 dark:border-blue-900">
-                  Panel
-                </span>
-              )}
             </NavLink>
           ))}
         </nav>
 
         {/* Right Side: Theme Selector & Action CTA */}
         <div className="flex items-center gap-3 shrink-0">
-          {/* Color Theme Selector (White & Dark Blue) */}
+          {/* Dedicated 2-Color Theme Switcher (White & Dark Blue) */}
           <div className="relative" ref={dropdownRef}>
             <button
               type="button"
-              onClick={() => setThemeDropdownOpen((prev) => !prev)}
-              aria-label={`Select color theme. Current theme: ${currentTheme.label}`}
+              onClick={handleToggleTwoThemes}
+              aria-label={`Switch color theme. Current theme: ${currentTheme.label} (White or Dark Blue)`}
               aria-expanded={themeDropdownOpen}
-              className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all duration-150 focus-visible:outline-2 focus-visible:outline-[#2563EB] bg-slate-100/90 hover:bg-slate-200 text-slate-800 border-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 dark:text-slate-100 dark:border-slate-700 shadow-2xs"
+              className="group inline-flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all duration-150 focus-visible:outline-2 focus-visible:outline-[#2563EB] bg-slate-100/90 hover:bg-slate-200 text-slate-800 border-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 dark:text-slate-100 dark:border-slate-700 shadow-2xs cursor-pointer active:scale-98"
             >
-              <Palette className="w-3.5 h-3.5 text-[#2563EB] dark:text-blue-400 shrink-0" />
-              <span
-                className="w-2.5 h-2.5 rounded-full border shadow-2xs shrink-0"
-                style={{
-                  backgroundColor: currentTheme.dotColor,
-                  borderColor: currentTheme.borderColor
-                }}
-              />
-              <span className="hidden sm:inline">{currentTheme.label}</span>
+              {/* Dedicated Two-Color Theme Icon (Split White & Dark Blue Circle) */}
+              <span className="relative flex items-center justify-center w-4 h-4 rounded-full overflow-hidden border border-slate-300 dark:border-slate-600 shadow-xs group-hover:scale-110 transition-transform">
+                {/* Left half: White */}
+                <span className="absolute inset-y-0 left-0 w-1/2 bg-white" />
+                {/* Right half: Dark Blue */}
+                <span className="absolute inset-y-0 right-0 w-1/2 bg-[#1E3A8A]" />
+                {/* Subtle center divider */}
+                <span className="absolute inset-y-0 left-1/2 w-[0.5px] bg-slate-400/60" />
+              </span>
+
+              {/* Theme Name with Sun/Moon indicator */}
+              <span className="inline-flex items-center gap-1.5 font-medium">
+                {theme === 'darkblue' ? (
+                  <Moon className="w-3 h-3 text-blue-400 shrink-0" />
+                ) : (
+                  <Sun className="w-3 h-3 text-amber-500 shrink-0" />
+                )}
+                <span className="hidden sm:inline">{currentTheme.label}</span>
+              </span>
+
               <ChevronDown
                 className={`w-3.5 h-3.5 text-slate-400 transition-transform duration-200 shrink-0 ${
                   themeDropdownOpen ? 'rotate-180' : ''
@@ -186,11 +196,12 @@ export default function Navbar({
           {/* Upload Notes CTA Button */}
           <Link
             to="/upload"
-            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-semibold bg-[#2563EB] hover:bg-blue-700 text-white shadow-sm transition-all duration-150 focus-visible:outline-2 focus-visible:outline-[#2563EB] active:scale-95"
+            className="group relative inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-semibold bg-[#2563EB] hover:bg-blue-700 text-white shadow-sm transition-all duration-200 active:scale-95 hover:shadow-md hover:shadow-blue-500/25 overflow-hidden"
           >
-            <UploadCloud className="w-3.5 h-3.5 shrink-0" />
+            <UploadCloud className="w-3.5 h-3.5 shrink-0 transition-transform duration-300 group-hover:-translate-y-0.5 group-hover:scale-110" />
             <span className="hidden sm:inline">Upload Notes</span>
             <span className="sm:hidden">Upload</span>
+            <span className="w-1.5 h-1.5 rounded-full bg-blue-200 animate-pulse ml-0.5 hidden sm:inline-block" />
           </Link>
 
           {/* Mobile Menu Hamburger Button */}
@@ -225,11 +236,6 @@ export default function Navbar({
                 }
               >
                 <span>{item.label}</span>
-                {item.label === 'Admin' && (
-                  <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-[#EFF6FF] dark:bg-blue-950 text-[#2563EB] dark:text-blue-400 border border-blue-200 dark:border-blue-900">
-                    Panel
-                  </span>
-                )}
               </NavLink>
             ))}
           </nav>

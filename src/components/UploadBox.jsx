@@ -479,12 +479,24 @@ export default function UploadBox({
                 return (
                   <div
                     key={item.id}
-                    className="p-3.5 bg-white dark:bg-slate-900 flex flex-col gap-2"
+                    className={`p-3.5 rounded-xl border transition-all duration-300 flex flex-col gap-2 ${
+                      item.status === 'done'
+                        ? 'bg-emerald-50/70 dark:bg-emerald-950/20 border-emerald-300 dark:border-emerald-800 shadow-xs animate-in fade-in zoom-in-98 duration-300'
+                        : item.status === 'uploading'
+                        ? 'bg-blue-50/50 dark:bg-blue-950/20 border-blue-200 dark:border-blue-900 animate-pulse'
+                        : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800'
+                    }`}
                   >
                     <div className="flex items-center justify-between gap-3">
                       <div className="flex items-center gap-3 min-w-0">
-                        <div className="w-8 h-8 rounded-lg bg-[#EFF6FF] dark:bg-slate-800 text-[#2563EB] dark:text-blue-400 flex items-center justify-center shrink-0">
-                          {isPdf ? (
+                        <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 transition-transform ${
+                          item.status === 'done'
+                            ? 'bg-emerald-100 dark:bg-emerald-900 text-emerald-600 dark:text-emerald-300 scale-105'
+                            : 'bg-[#EFF6FF] dark:bg-slate-800 text-[#2563EB] dark:text-blue-400'
+                        }`}>
+                          {item.status === 'done' ? (
+                            <CheckCircle2 className="w-4 h-4 animate-bounce" />
+                          ) : isPdf ? (
                             <FileText className="w-4 h-4" />
                           ) : (
                             <ImageIcon className="w-4 h-4" />
@@ -501,10 +513,16 @@ export default function UploadBox({
                       </div>
 
                       <div className="flex items-center gap-2 shrink-0">
+                        {item.status === 'uploading' && (
+                          <span className="inline-flex items-center gap-1.5 text-xs font-medium text-[#2563EB] dark:text-blue-400">
+                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                            <span className="tabular-nums font-mono">{item.progress}%</span>
+                          </span>
+                        )}
                         {item.status === 'done' && (
-                          <span className="inline-flex items-center gap-1 text-xs font-medium text-emerald-600 dark:text-emerald-400">
-                            <CheckCircle2 className="w-4 h-4" />
-                            <span>Uploaded</span>
+                          <span className="inline-flex items-center gap-1.5 text-xs font-bold text-emerald-600 dark:text-emerald-400 bg-white dark:bg-emerald-950/80 px-2.5 py-0.5 rounded-full border border-emerald-300 dark:border-emerald-700 shadow-2xs animate-in zoom-in-95 duration-200">
+                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 animate-bounce" />
+                            <span>Uploaded!</span>
                           </span>
                         )}
                         {item.status === 'error' && (

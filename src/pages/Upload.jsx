@@ -69,10 +69,11 @@ export default function Upload({
       {/* Recently Uploaded Files */}
       {recentUploads.length > 0 && (
         <div className="pt-6 border-t border-slate-200 dark:border-slate-800">
-          <h2 className="text-lg font-bold text-slate-900 dark:text-white mb-4">
-            Latest Files in Your Vault
+          <h2 className="text-lg font-bold text-slate-900 dark:text-white mb-4 flex items-center gap-2">
+            <span>Latest Files in Your Vault</span>
+            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping" />
           </h2>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 animate-in fade-in slide-in-from-bottom-3 duration-300">
             {recentUploads.map((file) => (
               <FileCard
                 key={file.id}

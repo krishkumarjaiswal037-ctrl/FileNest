@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
   Folder,
@@ -33,6 +33,7 @@ export default function Home({
   onDeleteConfirm
 }) {
   const navigate = useNavigate();
+  const [selectedSemester, setSelectedSemester] = useState(4); // Default to Semester 4 (the 4th semester)
   const recentFiles = files.slice(0, 6);
 
   const quickTools = [
@@ -74,6 +75,8 @@ export default function Home({
     }
   ];
 
+  const selectedSemFiles = files.filter((f) => Number(f.semester) === selectedSemester);
+
   return (
     <div className="space-y-16 pb-16">
       {/* 1. Hero Section with Live Database Stats */}
@@ -83,7 +86,7 @@ export default function Home({
         onOpenPreview={onPreview}
       />
 
-      {/* 2. Semester-Wise Quick Folders (Semesters 1 to 8) */}
+      {/* 2. Semester-Wise Quick Folders (Semesters 1 to 8) & 4-File Editor */}
       <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 mb-8">
           <div>
@@ -93,6 +96,9 @@ export default function Home({
             <h2 className="mt-1 text-2xl sm:text-3xl font-bold text-slate-900 dark:text-white">
               Browse Notes by Semester
             </h2>
+            <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+              Select any semester (e.g. 4th semester) below to browse, preview, and edit notes directly.
+            </p>
           </div>
           <Link
             to="/library"
@@ -107,25 +113,56 @@ export default function Home({
           {SEMESTER_LIST.map((sem) => {
             const semFiles = files.filter((f) => Number(f.semester) === sem);
             const semSubjects = subjectsBySemester[sem] || [];
+            const isSelected = selectedSemester === sem;
 
             return (
-              <button
+              <div
                 key={sem}
-                type="button"
-                onClick={() => navigate(`/library?semester=${sem}`)}
-                className="group text-left bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:border-[#2563EB] dark:hover:border-blue-500 rounded-2xl p-5 shadow-2xs hover:shadow-md transition-all duration-150 flex flex-col justify-between"
+                onClick={() => setSelectedSemester(sem)}
+                role="button"
+                tabIndex={0}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    setSelectedSemester(sem);
+                  }
+                }}
+                className={`group text-left bg-white dark:bg-slate-900 border rounded-2xl p-5 shadow-2xs transition-all duration-200 flex flex-col justify-between cursor-pointer ${
+                  isSelected
+                    ? 'border-[#2563EB] ring-2 ring-blue-500/20 shadow-md scale-[1.01]'
+                    : 'border-slate-200 dark:border-slate-800 hover:border-[#2563EB] dark:hover:border-blue-500 hover:shadow-md'
+                }`}
               >
                 <div>
                   <div className="flex items-center justify-between">
-                    <div className="w-10 h-10 rounded-xl bg-[#EFF6FF] dark:bg-slate-800 text-[#2563EB] dark:text-blue-400 flex items-center justify-center group-hover:bg-[#2563EB] group-hover:text-white transition-colors">
+                    <div
+                      className={`w-10 h-10 rounded-xl flex items-center justify-center transition-colors ${
+                        isSelected
+                          ? 'bg-[#2563EB] text-white'
+                          : 'bg-[#EFF6FF] dark:bg-slate-800 text-[#2563EB] dark:text-blue-400 group-hover:bg-[#2563EB] group-hover:text-white'
+                      }`}
+                    >
                       <Folder className="w-5 h-5" />
                     </div>
-                    <span className="text-xs font-mono tabular-nums text-slate-500 dark:text-slate-400">
-                      {semFiles.length} {semFiles.length === 1 ? 'file' : 'files'}
-                    </span>
+                    <div className="flex items-center gap-1.5">
+                      {sem === 4 && (
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-950 text-[#2563EB] dark:text-blue-300 border border-blue-200 dark:border-blue-800">
+                          4th Sem
+                        </span>
+                      )}
+                      <span className="text-xs font-mono tabular-nums text-slate-500 dark:text-slate-400">
+                        {semFiles.length} {semFiles.length === 1 ? 'file' : 'files'}
+                      </span>
+                    </div>
                   </div>
 
-                  <h3 className="mt-4 text-lg font-bold text-slate-900 dark:text-white group-hover:text-[#2563EB] dark:group-hover:text-blue-400 transition-colors">
+                  <h3
+                    className={`mt-4 text-lg font-bold transition-colors ${
+                      isSelected
+                        ? 'text-[#2563EB] dark:text-blue-400'
+                        : 'text-slate-900 dark:text-white group-hover:text-[#2563EB] dark:group-hover:text-blue-400'
+                    }`}
+                  >
                     Semester {sem}
                   </h3>
 
@@ -135,12 +172,96 @@ export default function Home({
                 </div>
 
                 <div className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-xs font-medium text-[#2563EB] dark:text-blue-400">
-                  <span className="tabular-nums">{semSubjects.length} CSE Subjects</span>
-                  <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" />
+                  <span className="tabular-nums">
+                    {isSelected ? 'Viewing & Edit Files' : `${semSubjects.length} CSE Subjects`}
+                  </span>
+                  <ArrowRight
+                    className={`w-3.5 h-3.5 transition-transform ${
+                      isSelected ? 'translate-x-1' : 'group-hover:translate-x-0.5'
+                    }`}
+                  />
                 </div>
-              </button>
+              </div>
             );
           })}
+        </div>
+
+        {/* Selected Semester Notes Viewer & Inline Editor (Showing up to 4 files grid with Edit action) */}
+        <div className="mt-6 p-6 rounded-2xl bg-slate-50/80 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-200 dark:border-slate-800">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-xl bg-blue-100 dark:bg-blue-950 text-[#2563EB] dark:text-blue-400 flex items-center justify-center font-bold text-sm">
+                S{selectedSemester}
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                  <span>Semester {selectedSemester} Notes &amp; Files</span>
+                  <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-blue-100 dark:bg-blue-950/80 text-[#2563EB] dark:text-blue-300">
+                    {selectedSemFiles.length} {selectedSemFiles.length === 1 ? 'file' : 'files'}
+                  </span>
+                </h3>
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  Click the Pencil icon on any note card below to edit title, subject, category, or tags.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2.5">
+              <Link
+                to="/upload"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-[#2563EB] hover:bg-blue-700 rounded-xl transition-colors shrink-0"
+              >
+                <UploadCloud className="w-3.5 h-3.5" />
+                <span>Upload to Sem {selectedSemester}</span>
+              </Link>
+              <Link
+                to={`/library?semester=${selectedSemester}`}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-[#2563EB] rounded-xl transition-colors shrink-0"
+              >
+                <span>Full Sem {selectedSemester} Library</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </Link>
+            </div>
+          </div>
+
+          {/* Files Grid for Selected Semester */}
+          <div className="mt-5">
+            {selectedSemFiles.length === 0 ? (
+              <div className="text-center py-10 px-4 bg-white dark:bg-slate-900 border border-dashed border-slate-300 dark:border-slate-700 rounded-xl">
+                <Folder className="w-10 h-10 text-slate-400 mx-auto mb-2" />
+                <h4 className="text-sm font-bold text-slate-800 dark:text-slate-200">
+                  No notes uploaded for Semester {selectedSemester} yet
+                </h4>
+                <p className="mt-1 text-xs text-slate-500 dark:text-slate-400 max-w-sm mx-auto">
+                  Upload lecture notes, question papers, or diagrams for Semester {selectedSemester} to browse and edit them here.
+                </p>
+                <Link
+                  to="/upload"
+                  className="mt-4 inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-white bg-[#2563EB] hover:bg-blue-700 rounded-xl transition-colors"
+                >
+                  <UploadCloud className="w-3.5 h-3.5" />
+                  <span>Upload Note for Semester {selectedSemester}</span>
+                </Link>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                {selectedSemFiles.slice(0, 4).map((file) => (
+                  <FileCard
+                    key={file.id}
+                    file={file}
+                    viewMode="grid"
+                    subjectsBySemester={subjectsBySemester}
+                    isAdmin={isAdmin}
+                    onPreview={onPreview}
+                    onDownload={onDownload}
+                    onToggleFavorite={onToggleFavorite}
+                    onRenameSave={onRenameSave}
+                    onDeleteConfirm={onDeleteConfirm}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       </section>
 
