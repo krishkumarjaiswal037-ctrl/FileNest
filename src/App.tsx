@@ -31,18 +31,18 @@ import {
   getClientUploaderId
 } from './lib/supabaseService';
 
-export type ThemeMode = 'white' | 'darkblue';
+export type ThemeMode = 'white' | 'darkblue' | 'emerald' | 'purple';
 
 export default function App() {
   // Admin Session state (guards Delete & Edit controls)
   const [adminSession, setAdminSession] = useState(() => getAdminSession());
   const isAdmin = Boolean(adminSession);
 
-  // 2-Color Theme state: White and Dark Blue
+  // 4-Color Theme state: White, Dark Blue, Emerald Green, and Royal Purple
   const [theme, setTheme] = useState<ThemeMode>(() => {
     try {
       const saved = localStorage.getItem('filenest_theme') || localStorage.getItem('studyvault_theme');
-      if (saved === 'white' || saved === 'darkblue') {
+      if (saved === 'white' || saved === 'darkblue' || saved === 'emerald' || saved === 'purple') {
         return saved as ThemeMode;
       }
       return localStorage.getItem('studyvault_dark_mode') === 'true' ? 'darkblue' : 'white';
@@ -141,19 +141,19 @@ export default function App() {
     }
   }, [notify]);
 
-  // Apply 4-Color Theme (White, Dark Blue, Sky Blue, Orange) on <html>
+  // Apply 4-Color Theme (White, Dark Blue, Emerald Green, Royal Purple) on <html>
   useEffect(() => {
     const root = document.documentElement;
     root.setAttribute('data-theme', theme);
-    if (theme === 'darkblue') {
-      root.classList.add('dark');
-    } else {
+    if (theme === 'white') {
       root.classList.remove('dark');
+    } else {
+      root.classList.add('dark');
     }
     try {
       localStorage.setItem('filenest_theme', theme);
       localStorage.setItem('studyvault_theme', theme);
-      localStorage.setItem('studyvault_dark_mode', String(theme === 'darkblue'));
+      localStorage.setItem('studyvault_dark_mode', String(theme !== 'white'));
     } catch {
       // ignore
     }

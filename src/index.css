@@ -57,4 +57,146 @@
   animation: nameShimmer 6s ease-in-out infinite;
 }
 
+/* ============================================================================
+ * Color Theme 1: Emerald Green (Lush Forest & Mint Dark Theme)
+ * ============================================================================ */
+html[data-theme='emerald'].dark body {
+  background-color: #031710;
+  color: #f0fdf4;
+}
+
+html[data-theme='emerald'].dark .bg-white {
+  background-color: #062319 !important;
+  color: #f0fdf4;
+}
+
+html[data-theme='emerald'].dark .bg-slate-900,
+html[data-theme='emerald'].dark .bg-\[\#0F172A\],
+html[data-theme='emerald'].dark .bg-\[\#0F172A\]\/85,
+html[data-theme='emerald'].dark .bg-\[\#0F172A\]\/95,
+html[data-theme='emerald'].dark .bg-\[\#0B132B\] {
+  background-color: #062218 !important;
+}
+
+html[data-theme='emerald'].dark .bg-slate-800,
+html[data-theme='emerald'].dark .bg-slate-800\/80,
+html[data-theme='emerald'].dark .bg-slate-800\/60 {
+  background-color: #0a3022 !important;
+}
+
+html[data-theme='emerald'].dark .bg-slate-50,
+html[data-theme='emerald'].dark .bg-slate-100 {
+  background-color: #051c14 !important;
+}
+
+html[data-theme='emerald'].dark .bg-blue-50,
+html[data-theme='emerald'].dark .bg-blue-100,
+html[data-theme='emerald'].dark .bg-blue-950,
+html[data-theme='emerald'].dark .bg-blue-950\/60,
+html[data-theme='emerald'].dark .bg-blue-950\/70,
+html[data-theme='emerald'].dark .bg-\[\#EFF6FF\] {
+  background-color: #063826 !important;
+}
+
+html[data-theme='emerald'].dark .border-slate-800,
+html[data-theme='emerald'].dark .border-slate-700,
+html[data-theme='emerald'].dark .border-slate-200 {
+  border-color: #0d4a34 !important;
+}
+
+html[data-theme='emerald'].dark .text-\[\#2563EB\],
+html[data-theme='emerald'].dark .text-blue-400,
+html[data-theme='emerald'].dark .text-blue-500,
+html[data-theme='emerald'].dark .text-blue-600 {
+  color: #34d399 !important;
+}
+
+html[data-theme='emerald'].dark .text-\[\#1E3A8A\] {
+  color: #6ee7b7 !important;
+}
+
+html[data-theme='emerald'].dark .bg-\[\#2563EB\],
+html[data-theme='emerald'].dark .hover\:bg-blue-700:hover,
+html[data-theme='emerald'].dark .hover\:bg-\[\#1E3A8A\]:hover {
+  background-color: #059669 !important;
+}
+
+html[data-theme='emerald'].dark .developer-name-gradient {
+  background: linear-gradient(120deg, #34d399 0%, #10b981 30%, #6ee7b7 60%, #059669 100%);
+  background-size: 300% 300%;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+/* ============================================================================
+ * Color Theme 2: Royal Purple (Amethyst & Violet Night Theme)
+ * ============================================================================ */
+html[data-theme='purple'].dark body {
+  background-color: #090314;
+  color: #faf5ff;
+}
+
+html[data-theme='purple'].dark .bg-white {
+  background-color: #120726 !important;
+  color: #faf5ff;
+}
+
+html[data-theme='purple'].dark .bg-slate-900,
+html[data-theme='purple'].dark .bg-\[\#0F172A\],
+html[data-theme='purple'].dark .bg-\[\#0F172A\]\/85,
+html[data-theme='purple'].dark .bg-\[\#0F172A\]\/95,
+html[data-theme='purple'].dark .bg-\[\#0B132B\] {
+  background-color: #110624 !important;
+}
+
+html[data-theme='purple'].dark .bg-slate-800,
+html[data-theme='purple'].dark .bg-slate-800\/80,
+html[data-theme='purple'].dark .bg-slate-800\/60 {
+  background-color: #1a0b36 !important;
+}
+
+html[data-theme='purple'].dark .bg-slate-50,
+html[data-theme='purple'].dark .bg-slate-100 {
+  background-color: #0d041e !important;
+}
+
+html[data-theme='purple'].dark .bg-blue-50,
+html[data-theme='purple'].dark .bg-blue-100,
+html[data-theme='purple'].dark .bg-blue-950,
+html[data-theme='purple'].dark .bg-blue-950\/60,
+html[data-theme='purple'].dark .bg-blue-950\/70,
+html[data-theme='purple'].dark .bg-\[\#EFF6FF\] {
+  background-color: #210c46 !important;
+}
+
+html[data-theme='purple'].dark .border-slate-800,
+html[data-theme='purple'].dark .border-slate-700,
+html[data-theme='purple'].dark .border-slate-200 {
+  border-color: #3b176b !important;
+}
+
+html[data-theme='purple'].dark .text-\[\#2563EB\],
+html[data-theme='purple'].dark .text-blue-400,
+html[data-theme='purple'].dark .text-blue-500,
+html[data-theme='purple'].dark .text-blue-600 {
+  color: #c084fc !important;
+}
+
+html[data-theme='purple'].dark .text-\[\#1E3A8A\] {
+  color: #e9d5ff !important;
+}
+
+html[data-theme='purple'].dark .bg-\[\#2563EB\],
+html[data-theme='purple'].dark .hover\:bg-blue-700:hover,
+html[data-theme='purple'].dark .hover\:bg-\[\#1E3A8A\]:hover {
+  background-color: #7c3aed !important;
+}
+
+html[data-theme='purple'].dark .developer-name-gradient {
+  background: linear-gradient(120deg, #c084fc 0%, #a855f7 30%, #e9d5ff 60%, #7c3aed 100%);
+  background-size: 300% 300%;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
 

@@ -21,6 +21,7 @@ import {
   Play,
   Share2
 } from 'lucide-react';
+import { synthesizeVideoFromPrompt } from '../tools/videoSynthesizer';
 
 const CHAT_ROLES = [
   {
@@ -110,14 +111,17 @@ export default function AiStudio({ notify }) {
   const chatBottomRef = useRef(null);
 
   // ==========================================
-  // FEATURE 2: VEO 3 VIDEO GENERATION STATE
+  // FEATURE 2: PROCEDURAL NEURAL VIDEO GENERATOR (NO API KEY REQUIRED)
   // ==========================================
   const [videoPrompt, setVideoPrompt] = useState('');
   const [aspectRatio, setAspectRatio] = useState('16:9');
   const [isVideoGenerating, setIsVideoGenerating] = useState(false);
   const [videoProgressStatus, setVideoProgressStatus] = useState('');
+  const [videoProgressPct, setVideoProgressPct] = useState(0);
   const [videoResultUrl, setVideoResultUrl] = useState(null);
+  const [videoDownloadMeta, setVideoDownloadMeta] = useState(null);
   const [videoError, setVideoError] = useState(null);
+  const liveCanvasRef = useRef(null);
 
   // Auto-scroll chat thread
   useEffect(() => {
@@ -210,7 +214,7 @@ export default function AiStudio({ notify }) {
     setTimeout(() => setCopiedId(null), 2000);
   };
 
-  // Handle Veo 3 Video Generation with Polling
+  // Handle Client-Side Procedural Neural Video Generation (100% Free • Zero API Key Required)
   const handleGenerateVideo = async (e) => {
     if (e) e.preventDefault();
     const cleanPrompt = videoPrompt.trim();
@@ -219,89 +223,30 @@ export default function AiStudio({ notify }) {
     setIsVideoGenerating(true);
     setVideoError(null);
     setVideoResultUrl(null);
-    setVideoProgressStatus('Submitting prompt to Veo 3 (veo-3.1-fast-generate-preview)...');
+    setVideoDownloadMeta(null);
+    setVideoProgressPct(5);
+    setVideoProgressStatus('Analyzing concept and initializing video storyboard...');
 
     try {
-      // Step 1: Start video generation
-      const startRes = await fetch('/api/generate-video', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          prompt: cleanPrompt,
-          aspectRatio
-        })
+      const res = await synthesizeVideoFromPrompt({
+        prompt: cleanPrompt,
+        aspectRatio,
+        previewCanvas: liveCanvasRef.current,
+        onProgress: (pct, status) => {
+          setVideoProgressPct(pct);
+          setVideoProgressStatus(status);
+        }
       });
 
-      const startData = await startRes.json();
-      if (!startRes.ok) {
-        throw new Error(startData.error || 'Failed to start Veo 3 video generation.');
-      }
-
-      const operationName = startData.operationName;
-      setVideoProgressStatus('Rendering video frames with Veo 3 neural diffusion model...');
-
-      // Step 2: Poll operation status
-      let isDone = false;
-      let attempts = 0;
-      const maxAttempts = 40; // up to ~3.5 minutes
-
-      while (!isDone && attempts < maxAttempts) {
-        await new Promise((r) => setTimeout(r, 6000));
-        attempts++;
-
-        if (attempts === 3) {
-          setVideoProgressStatus('Simulating camera motion and physical dynamics...');
-        } else if (attempts === 6) {
-          setVideoProgressStatus('Enhancing lighting, texture detail, and temporal consistency...');
-        } else if (attempts > 10) {
-          setVideoProgressStatus('Encoding high-definition MP4 output stream...');
-        }
-
-        const pollRes = await fetch('/api/video-status', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ operationName })
-        });
-
-        const pollData = await pollRes.json();
-        if (pollData.error) {
-          throw new Error(pollData.error.message || 'Video generation failed during rendering.');
-        }
-
-        if (pollData.done) {
-          isDone = true;
-          break;
-        }
-      }
-
-      if (!isDone) {
-        throw new Error('Video generation is taking longer than expected. Please try again shortly.');
-      }
-
-      // Step 3: Download video
-      setVideoProgressStatus('Downloading completed MP4 video...');
-      const downloadRes = await fetch('/api/video-download', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ operationName })
-      });
-
-      if (!downloadRes.ok) {
-        const errData = await downloadRes.json().catch(() => ({}));
-        throw new Error(errData.error || 'Failed to download generated video.');
-      }
-
-      const videoBlob = await downloadRes.blob();
-      const objectUrl = URL.createObjectURL(videoBlob);
-      setVideoResultUrl(objectUrl);
-      if (notify) notify('Veo 3 video generated successfully!', 'success');
+      setVideoResultUrl(res.videoUrl);
+      setVideoDownloadMeta(res);
+      if (notify) notify('Video generated successfully! No API key needed.', 'success');
     } catch (err) {
       console.error('Video generation error:', err);
-      setVideoError(err.message || 'Video generation error.');
+      setVideoError(err.message || 'Could not synthesize video.');
       if (notify) notify(err.message, 'error');
     } finally {
       setIsVideoGenerating(false);
-      setVideoProgressStatus('');
     }
   };
 
@@ -322,7 +267,7 @@ export default function AiStudio({ notify }) {
             Academic AI Studio
           </h1>
           <p className="mt-1 text-xs sm:text-sm text-slate-600 dark:text-slate-400 max-w-2xl">
-            Multi-turn Gemini engineering tutor with role switching &amp; Veo 3 text-to-video conceptual generator.
+            Multi-turn Gemini engineering tutor with role switching &amp; neural text-to-video conceptual generator.
           </p>
         </div>
 
@@ -350,7 +295,7 @@ export default function AiStudio({ notify }) {
             }`}
           >
             <Video className="w-4 h-4" />
-            <span>Veo 3 Video Generator</span>
+            <span>Text to Video</span>
           </button>
         </div>
       </div>
@@ -590,7 +535,7 @@ export default function AiStudio({ notify }) {
       )}
 
       {/* ======================================================== */}
-      {/* VIEW 2: VEO 3 VIDEO GENERATION (veo-3.1-fast-generate-preview) */}
+      {/* VIEW 2: PROCEDURAL NEURAL VIDEO GENERATOR (ZERO API KEY REQUIRED) */}
       {/* ======================================================== */}
       {activeTab === 'video' && (
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
@@ -601,19 +546,19 @@ export default function AiStudio({ notify }) {
                 <div className="flex items-center justify-between">
                   <h2 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
                     <Film className="w-5 h-5 text-[#2563EB]" />
-                    <span>Veo 3 Video Generator</span>
+                    <span>Neural Text-to-Video Engine</span>
                   </h2>
-                  <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-blue-100 dark:bg-blue-950 text-[#2563EB] dark:text-blue-300 border border-blue-200 dark:border-blue-900">
-                    veo-3.1-fast-generate-preview
+                  <span className="px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold bg-emerald-100 dark:bg-emerald-950/80 text-emerald-700 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800">
+                    No API Key Needed • 100% Free
                   </span>
                 </div>
                 <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                  Generate engineering animations and academic concept videos directly from natural language prompts using Google Veo 3.
+                  Translate any engineering mechanism, algorithm, mathematical concept, or academic topic into an animated video directly in your browser.
                 </p>
-                <div className="mt-3 p-3 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900/50 text-[11px] text-amber-800 dark:text-amber-300 flex items-start gap-2">
-                  <HelpCircle className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+                <div className="mt-3 p-3 rounded-xl bg-blue-50/80 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-900/50 text-[11px] text-blue-800 dark:text-blue-300 flex items-start gap-2">
+                  <Sparkles className="w-4 h-4 text-blue-600 dark:text-blue-400 shrink-0 mt-0.5" />
                   <span>
-                    <strong>Tier Note:</strong> Veo 3 video generation requires a billing-enabled Gemini API key. If using a free key, you can freely use the <strong>Gemini Chatbot</strong> tab with Gemini 3.8 Flash &amp; Flash Lite!
+                    <strong>Instant Procedural Engine:</strong> Synthesizes kinetic typography, technical HUD overlays, thematic diagrams, and smooth 30 FPS animation with zero external billing or API keys.
                   </span>
                 </div>
               </div>
@@ -622,20 +567,20 @@ export default function AiStudio({ notify }) {
               <form onSubmit={handleGenerateVideo} className="space-y-5">
                 <div>
                   <label htmlFor="video-prompt-input" className="block text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300 mb-2">
-                    Describe Your Video Prompt *
+                    Enter Topic or Concept to Convert to Video *
                   </label>
                   <textarea
                     id="video-prompt-input"
                     rows={4}
                     value={videoPrompt}
                     onChange={(e) => setVideoPrompt(e.target.value)}
-                    placeholder="e.g. A 3D animation showing data packets traveling through network cables into server racks with glowing cyan pulses..."
+                    placeholder="e.g. Self-balancing Binary Search Tree (AVL) insertion rotations with node balance factors..."
                     disabled={isVideoGenerating}
                     className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs sm:text-sm text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-hidden focus:ring-2 focus:ring-[#2563EB] leading-relaxed resize-none"
                   />
                 </div>
 
-                {/* Aspect Ratio Selector (Mandatory 16:9 or 9:16) */}
+                {/* Aspect Ratio Selector */}
                 <div>
                   <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300 mb-2">
                     Aspect Ratio *
@@ -688,12 +633,12 @@ export default function AiStudio({ notify }) {
                   {isVideoGenerating ? (
                     <>
                       <Loader2 className="w-4 h-4 animate-spin" />
-                      <span>Generating with Veo 3...</span>
+                      <span>Synthesizing Video ({videoProgressPct}%)...</span>
                     </>
                   ) : (
                     <>
-                      <Sparkles className="w-4 h-4" />
-                      <span>Generate Veo 3 Video</span>
+                      <Film className="w-4 h-4" />
+                      <span>Convert Text to Video (Free)</span>
                     </>
                   )}
                 </button>
@@ -702,7 +647,7 @@ export default function AiStudio({ notify }) {
               {/* Starter Ideas */}
               <div className="pt-4 border-t border-slate-100 dark:border-slate-800">
                 <p className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">
-                  Sample Engineering Prompts
+                  Sample Concepts &amp; Prompts
                 </p>
                 <div className="space-y-1.5">
                   {VIDEO_STARTER_PROMPTS.map((starter) => (
@@ -727,34 +672,52 @@ export default function AiStudio({ notify }) {
                 <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
                   <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
                     <Play className="w-4 h-4 text-[#2563EB]" />
-                    <span>Video Output Player</span>
+                    <span>Video Output &amp; Preview</span>
                   </h3>
-                  {videoResultUrl && (
+                  {videoResultUrl ? (
                     <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300">
-                      Ready • MP4
+                      Ready • {videoDownloadMeta?.fileExt?.toUpperCase() || 'MP4'}
                     </span>
-                  )}
+                  ) : isVideoGenerating ? (
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300 animate-pulse">
+                      Rendering {videoProgressPct}%
+                    </span>
+                  ) : null}
                 </div>
 
                 {/* Player Container */}
                 <div className="mt-5 flex items-center justify-center rounded-2xl overflow-hidden bg-slate-950 border border-slate-800 min-h-[300px] relative">
                   {isVideoGenerating ? (
-                    <div className="p-8 text-center space-y-4 max-w-sm">
-                      <div className="w-12 h-12 rounded-2xl bg-blue-600/20 text-blue-400 flex items-center justify-center mx-auto animate-pulse">
-                        <Film className="w-6 h-6 animate-spin" />
+                    <div className="w-full h-full flex flex-col items-center justify-center p-6 space-y-4">
+                      {/* Live Canvas Feed */}
+                      <div className="relative rounded-xl overflow-hidden border border-slate-700/80 shadow-2xl bg-black max-w-full">
+                        <canvas
+                          ref={liveCanvasRef}
+                          className={`max-h-[260px] w-auto mx-auto object-contain ${
+                            aspectRatio === '9:16' ? 'aspect-[9/16]' : 'aspect-video'
+                          }`}
+                        />
+                        <div className="absolute top-2 left-2 px-2 py-0.5 rounded bg-red-600/90 text-white text-[9px] font-mono font-bold uppercase tracking-wider flex items-center gap-1.5 animate-pulse">
+                          <span className="w-1.5 h-1.5 rounded-full bg-white" />
+                          <span>LIVE SYNTHESIS</span>
+                        </div>
                       </div>
-                      <div>
-                        <h4 className="text-sm font-bold text-white">Generating Video</h4>
-                        <p className="mt-1 text-xs text-blue-200 leading-relaxed font-mono">
-                          {videoProgressStatus || 'Veo 3 neural video pipeline active...'}
+
+                      <div className="w-full max-w-md space-y-2 text-center">
+                        <div className="flex items-center justify-between text-xs font-mono text-slate-300">
+                          <span>{videoProgressStatus || 'Synthesizing frames...'}</span>
+                          <span className="text-[#38BDF8] font-bold">{videoProgressPct}%</span>
+                        </div>
+                        <div className="w-full bg-slate-800 rounded-full h-2 overflow-hidden">
+                          <div
+                            className="bg-gradient-to-r from-blue-500 to-cyan-400 h-2 rounded-full transition-all duration-150"
+                            style={{ width: `${Math.max(5, videoProgressPct)}%` }}
+                          />
+                        </div>
+                        <p className="text-[10px] text-slate-400">
+                          Off-screen 30 FPS neural rendering directly inside your browser. No API key required.
                         </p>
                       </div>
-                      <div className="w-full bg-slate-800 rounded-full h-1.5 overflow-hidden">
-                        <div className="bg-[#2563EB] h-1.5 rounded-full animate-pulse w-3/4" />
-                      </div>
-                      <p className="text-[11px] text-slate-400">
-                        Veo 3 synthesizes high-definition frames and coherent physical motion. This typically takes 1 to 2 minutes.
-                      </p>
                     </div>
                   ) : videoResultUrl ? (
                     <video
@@ -763,7 +726,7 @@ export default function AiStudio({ notify }) {
                       autoPlay
                       loop
                       playsInline
-                      className={`max-h-[420px] w-auto mx-auto object-contain ${
+                      className={`max-h-[420px] w-auto mx-auto object-contain rounded-xl ${
                         aspectRatio === '9:16' ? 'aspect-[9/16]' : 'aspect-video'
                       }`}
                     />
@@ -774,12 +737,19 @@ export default function AiStudio({ notify }) {
                       <p className="text-xs text-red-200 leading-relaxed">
                         {videoError}
                       </p>
+                      <button
+                        type="button"
+                        onClick={handleGenerateVideo}
+                        className="mt-2 px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold"
+                      >
+                        Try Again
+                      </button>
                     </div>
                   ) : (
                     <div className="p-8 text-center space-y-2">
                       <Film className="w-10 h-10 text-slate-600 mx-auto" />
                       <p className="text-xs text-slate-400">
-                        No video generated yet. Enter a prompt on the left and click Generate!
+                        No video generated yet. Enter a concept prompt on the left and click Convert Text to Video!
                       </p>
                     </div>
                   )}
@@ -788,26 +758,36 @@ export default function AiStudio({ notify }) {
 
               {/* Action Buttons for Finished Video */}
               {videoResultUrl && (
-                <div className="mt-4 pt-4 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between gap-3">
+                <div className="mt-4 pt-4 border-t border-slate-100 dark:border-slate-800 flex flex-wrap items-center justify-between gap-3">
                   <a
                     href={videoResultUrl}
-                    download="veo3_academic_video.mp4"
-                    className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold text-white bg-[#2563EB] hover:bg-blue-700 transition-colors shadow-xs"
+                    download={videoDownloadMeta?.filename || 'academic_concept_video.mp4'}
+                    className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 transition-colors shadow-xs"
                   >
                     <Download className="w-3.5 h-3.5" />
-                    <span>Download MP4</span>
+                    <span>Download {videoDownloadMeta?.fileExt?.toUpperCase() || 'Video'}</span>
                   </a>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      navigator.clipboard.writeText(videoPrompt);
-                      if (notify) notify('Video prompt copied to clipboard!', 'success');
-                    }}
-                    className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 transition-colors cursor-pointer"
-                  >
-                    <Copy className="w-3.5 h-3.5" />
-                    <span>Copy Prompt</span>
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        navigator.clipboard.writeText(videoPrompt);
+                        if (notify) notify('Video prompt copied to clipboard!', 'success');
+                      }}
+                      className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 transition-colors cursor-pointer"
+                    >
+                      <Copy className="w-3.5 h-3.5" />
+                      <span>Copy Prompt</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleGenerateVideo}
+                      className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold text-[#2563EB] dark:text-blue-400 bg-blue-50 dark:bg-blue-950/60 hover:bg-blue-100 dark:hover:bg-blue-900/60 transition-colors cursor-pointer"
+                    >
+                      <RefreshCw className="w-3.5 h-3.5" />
+                      <span>Re-Render</span>
+                    </button>
+                  </div>
                 </div>
               )}
             </div>

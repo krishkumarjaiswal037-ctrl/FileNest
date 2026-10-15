@@ -18,7 +18,7 @@ export const THEME_OPTIONS = [
   {
     id: 'white',
     label: 'White',
-    description: 'Clean & minimalist white theme',
+    description: 'Clean & minimalist light theme',
     dotColor: '#FFFFFF',
     borderColor: '#CBD5E1',
     badgeClass: 'bg-white border-slate-300 text-slate-800'
@@ -30,12 +30,28 @@ export const THEME_OPTIONS = [
     dotColor: '#1E3A8A',
     borderColor: '#3B82F6',
     badgeClass: 'bg-[#0F172A] border-blue-800 text-blue-200'
+  },
+  {
+    id: 'emerald',
+    label: 'Emerald Green',
+    description: 'Lush forest jade & mint dark theme',
+    dotColor: '#059669',
+    borderColor: '#34D399',
+    badgeClass: 'bg-[#041a14] border-emerald-800 text-emerald-200'
+  },
+  {
+    id: 'purple',
+    label: 'Royal Purple',
+    description: 'Vibrant amethyst & violet night theme',
+    dotColor: '#7C3AED',
+    borderColor: '#C084FC',
+    badgeClass: 'bg-[#130924] border-purple-800 text-purple-200'
   }
 ];
 
 /**
  * Sticky Glassmorphism Navbar Component (src/components/Navbar.jsx)
- * Clean navigation bar with White & Dark Blue theme toggle, links, and Upload CTA.
+ * Clean navigation bar with 4 distinct color themes, links, and Upload CTA.
  */
 export default function Navbar({
   theme = 'white',
@@ -120,12 +136,12 @@ export default function Navbar({
 
         {/* Right Side: Theme Selector & Action CTA */}
         <div className="flex items-center gap-3 shrink-0">
-          {/* Dedicated 2-Color Theme Switcher (White & Dark Blue) */}
+          {/* Theme Selector (White, Dark Blue, Emerald Green, Royal Purple) */}
           <div className="relative" ref={dropdownRef}>
             <button
               type="button"
               onClick={handleToggleTwoThemes}
-              aria-label={`Switch color theme. Current theme: ${currentTheme.label} (White or Dark Blue)`}
+              aria-label={`Switch color theme. Current theme: ${currentTheme.label}`}
               aria-expanded={themeDropdownOpen}
               className="group inline-flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all duration-150 focus-visible:outline-2 focus-visible:outline-[#2563EB] bg-slate-100/90 hover:bg-slate-200 text-slate-800 border-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 dark:text-slate-100 dark:border-slate-700 shadow-2xs cursor-pointer active:scale-98"
             >
@@ -235,7 +251,7 @@ export default function Navbar({
                 </div>
                 {item.isAi && (
                   <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-blue-100 dark:bg-blue-950 text-[#2563EB] dark:text-blue-300">
-                    Gemini &amp; Veo
+                    Gemini &amp; Video
                   </span>
                 )}
               </NavLink>
