@@ -9,7 +9,8 @@ import {
   Palette,
   Sun,
   Moon,
-  SunMoon
+  SunMoon,
+  Sparkles
 } from 'lucide-react';
 import FileNestLogo from './FileNestLogo';
 
@@ -61,7 +62,8 @@ export default function Navbar({
     { label: 'Home', to: '/' },
     { label: 'Upload', to: '/upload' },
     { label: 'Library', to: '/library' },
-    { label: 'Tools', to: '/tools' }
+    { label: 'Tools', to: '/tools' },
+    { label: 'AI Studio', to: '/ai', isAi: true }
   ];
 
   const currentTheme = THEME_OPTIONS.find((t) => t.id === theme) || THEME_OPTIONS[0];
@@ -110,7 +112,8 @@ export default function Navbar({
                 }`
               }
             >
-              {item.label}
+              {item.isAi && <Sparkles className="w-3.5 h-3.5 text-[#2563EB] dark:text-blue-400 animate-pulse" />}
+              <span>{item.label}</span>
             </NavLink>
           ))}
         </nav>
@@ -226,7 +229,15 @@ export default function Navbar({
                   }`
                 }
               >
-                <span>{item.label}</span>
+                <div className="flex items-center gap-2">
+                  {item.isAi && <Sparkles className="w-4 h-4 text-[#2563EB] dark:text-blue-400" />}
+                  <span>{item.label}</span>
+                </div>
+                {item.isAi && (
+                  <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-blue-100 dark:bg-blue-950 text-[#2563EB] dark:text-blue-300">
+                    Gemini &amp; Veo
+                  </span>
+                )}
               </NavLink>
             ))}
           </nav>

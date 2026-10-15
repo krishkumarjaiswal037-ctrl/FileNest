@@ -11,6 +11,7 @@ import Library from './pages/Library';
 import Tools from './pages/Tools';
 import About from './pages/About';
 import Admin from './pages/Admin';
+import AiStudio from './pages/AiStudio';
 import { getSubjectsBySemester, saveAllSubjectsMap } from './data/subjects';
 import { getAdminSession } from './lib/adminAuth';
 import {
@@ -394,6 +395,7 @@ export default function App() {
               }
             />
             <Route path="/about" element={<About />} />
+            <Route path="/ai" element={<AiStudio notify={notify} />} />
             <Route
               path="/admin"
               element={
