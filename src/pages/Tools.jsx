@@ -103,18 +103,13 @@ export default function Tools({
     if (!trimmed) return;
 
     try {
-      await addSubjectToSupabase(editingSemester, trimmed, true);
+      const updated = await addSubjectToSupabase(editingSemester, trimmed, true);
+      onSubjectsUpdated(updated);
+      setNewSubjectInput('');
+      if (notify) notify(`Added "${trimmed}" to Semester ${editingSemester}.`, 'success');
     } catch (err) {
-      console.warn('Supabase add subject note:', err);
+      if (notify) notify(err?.message || 'Could not add subject', 'error');
     }
-
-    const updated = saveSubjectsForSemester(editingSemester, [
-      ...currentSemSubjects,
-      trimmed
-    ]);
-    onSubjectsUpdated(updated);
-    setNewSubjectInput('');
-    if (notify) notify(`Added "${trimmed}" to Semester ${editingSemester}.`, 'success');
   };
 
   const handleRemoveCurriculumSubject = async (subjToRemove) => {
@@ -124,15 +119,12 @@ export default function Tools({
     }
 
     try {
-      await deleteSubjectFromSupabase(editingSemester, subjToRemove, true);
+      const updated = await deleteSubjectFromSupabase(editingSemester, subjToRemove, true);
+      onSubjectsUpdated(updated);
+      if (notify) notify(`Removed "${subjToRemove}" from Semester ${editingSemester}.`, 'info');
     } catch (err) {
-      console.warn('Supabase delete subject note:', err);
+      if (notify) notify(err?.message || 'Could not remove subject', 'error');
     }
-
-    const nextList = currentSemSubjects.filter((s) => s !== subjToRemove);
-    const updated = saveSubjectsForSemester(editingSemester, nextList);
-    onSubjectsUpdated(updated);
-    if (notify) notify(`Removed "${subjToRemove}" from Semester ${editingSemester}.`, 'info');
   };
 
   const handleResetCurriculum = () => {

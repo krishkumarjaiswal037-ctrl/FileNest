@@ -62,11 +62,6 @@ export default function Footer({ onOpenSqlModal }) {
                   Smart CSE Tools &amp; CGPA
                 </Link>
               </li>
-              <li>
-                <Link to="/about" className="hover:text-[#2563EB] dark:hover:text-blue-400 transition-colors">
-                  About Developer
-                </Link>
-              </li>
               <li className="pt-1.5 border-t border-slate-200/60 dark:border-slate-800/60">
                 <Link
                   to="/admin"

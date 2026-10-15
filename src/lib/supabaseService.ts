@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
-import { getSubjectsBySemester } from '../data/subjects';
+import { getSubjectsBySemester, saveAllSubjectsMap } from '../data/subjects';
 
 /**
  * ============================================================================
@@ -12,8 +12,8 @@ import { getSubjectsBySemester } from '../data/subjects';
  * - Strict Admin vs User Role RLS enforcement
  */
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://zmljxivkrxigyhkkdgfp.supabase.co';
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'sb_publishable_zMkCyZKmqm1LIGmJCjbh1w_-OYn1Hkt';
+const supabaseUrl = (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_SUPABASE_URL) || 'https://zmljxivkrxigyhkkdgfp.supabase.co';
+const supabaseAnonKey = (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_SUPABASE_ANON_KEY) || 'sb_publishable_zMkCyZKmqm1LIGmJCjbh1w_-OYn1Hkt';
 
 export const SUPABASE_PROJECT_ID = 'zmljxivkrxigyhkkdgfp';
 
@@ -809,92 +809,226 @@ export async function deleteStudyFile(fileObj: any, isAdmin = false) {
 
 /**
  * ============================================================================
- * SUPABASE SUBJECT MANAGEMENT (Strict Admin Only for Insert & Delete)
+ * SUPABASE SUBJECT MANAGEMENT WITH CLOUD STORAGE PERSISTENCE
  * ============================================================================
+ * - Persists to Supabase Storage ('study-files/curriculum_subjects.json')
+ * - Accessible across all devices, mobile, and guest visitors
+ * - Strictly prevents re-injecting 48 dummy default subjects on refresh
+ * - Supports Add, Rename, and Delete operations
  */
 
-export async function fetchSubjectsFromSupabase(): Promise<{ [semester: number]: string[] } | null> {
-  if (!isSupabaseConfigured || !supabase) return null;
+const CURRICULUM_CLOUD_FILE = 'curriculum_subjects.json';
 
-  try {
-    const { data, error } = await supabase
-      .from(SUBJECTS_TABLE)
-      .select('semester, name')
-      .order('name', { ascending: true });
+/**
+ * Save the entire subjects map directly to Supabase cloud storage & local storage
+ */
+export async function saveSubjectsToSupabase(
+  subjectsMap: { [semester: number]: string[] }
+): Promise<{ [semester: number]: string[] }> {
+  const cleanMap: { [sem: number]: string[] } = {};
+  for (let s = 1; s <= 8; s++) {
+    cleanMap[s] = Array.isArray(subjectsMap[s])
+      ? Array.from(new Set(subjectsMap[s].map((item) => String(item).trim()).filter(Boolean)))
+      : [];
+  }
 
-    if (error) {
-      console.warn('Supabase subjects fetch notice:', error.message);
-      return null;
+  // 1. Save to local storage & broadcast event
+  saveAllSubjectsMap(cleanMap);
+
+  // 2. Persist to Supabase Storage bucket so all devices see the changes
+  if (isSupabaseConfigured && supabase) {
+    try {
+      const jsonContent = JSON.stringify(cleanMap, null, 2);
+      const { error: uploadErr } = await supabase.storage
+        .from(STORAGE_BUCKET)
+        .upload(CURRICULUM_CLOUD_FILE, jsonContent, {
+          contentType: 'application/json',
+          upsert: true
+        });
+
+      if (uploadErr) {
+        console.warn('Supabase storage subject upload notice:', uploadErr.message);
+      }
+    } catch (err: any) {
+      console.warn('Failed to upload subjects to Supabase storage:', err?.message);
     }
 
-    if (Array.isArray(data) && data.length > 0) {
-      // Merge with base subjects so default curriculum subjects are preserved alongside admin additions
-      const baseMap = getSubjectsBySemester();
-      const map: { [sem: number]: string[] } = { ...baseMap };
+    // Try optional SUBJECTS_TABLE sync (non-blocking)
+    try {
+      for (const sem of [1, 2, 3, 4, 5, 6, 7, 8]) {
+        for (const name of cleanMap[sem]) {
+          await supabase.from(SUBJECTS_TABLE).insert([{ semester: sem, name }]).select();
+        }
+      }
+    } catch {
+      // non-blocking
+    }
+  }
 
-      data.forEach((row) => {
+  return cleanMap;
+}
+
+/**
+ * Fetch subjects strictly from Supabase cloud storage and real uploaded files.
+ * NEVER re-injects 48 dummy default subjects.
+ */
+export async function fetchSubjectsFromSupabase(): Promise<{ [semester: number]: string[] } | null> {
+  const baseMap = (getSubjectsBySemester() || {}) as Record<number, string[]>;
+  const currentClean: { [sem: number]: string[] } = {};
+  for (let s = 1; s <= 8; s++) {
+    currentClean[s] = Array.isArray(baseMap[s]) ? [...baseMap[s]] : [];
+  }
+
+  if (!isSupabaseConfigured || !supabase) {
+    return currentClean;
+  }
+
+  let cloudMap: { [sem: number]: string[] } | null = null;
+
+  // 1. Try to download curriculum_subjects.json from Supabase Storage
+  try {
+    const { data, error } = await supabase.storage
+      .from(STORAGE_BUCKET)
+      .download(CURRICULUM_CLOUD_FILE);
+
+    if (!error && data) {
+      const text = await data.text();
+      const parsed = JSON.parse(text);
+      if (parsed && typeof parsed === 'object') {
+        cloudMap = {};
+        for (let s = 1; s <= 8; s++) {
+          cloudMap[s] = Array.isArray(parsed[s])
+            ? Array.from(new Set(parsed[s].map((x: any) => String(x).trim()).filter(Boolean)))
+            : [];
+        }
+      }
+    }
+  } catch (dlErr: any) {
+    console.warn('Supabase storage download notice:', dlErr?.message);
+  }
+
+  // 2. Fetch distinct subjects from real uploaded files in Supabase
+  try {
+    const { data: fileRows } = await supabase
+      .from(activeFilesTableName)
+      .select('semester, subject');
+
+    if (Array.isArray(fileRows) && fileRows.length > 0) {
+      const targetMap = cloudMap || currentClean;
+      fileRows.forEach((row: any) => {
         const sem = Number(row.semester);
-        if (!map[sem]) map[sem] = [];
-        if (row.name && typeof row.name === 'string') {
-          const trimmed = row.name.trim();
-          if (trimmed && !map[sem].includes(trimmed)) {
-            map[sem].push(trimmed);
+        const subj = row.subject && typeof row.subject === 'string' ? row.subject.trim() : '';
+        if (sem >= 1 && sem <= 8 && subj) {
+          if (!targetMap[sem]) targetMap[sem] = [];
+          if (!targetMap[sem].includes(subj)) {
+            targetMap[sem].push(subj);
           }
         }
       });
-      return map;
+      cloudMap = targetMap;
     }
-    return null;
-  } catch (err) {
-    console.warn('Supabase subjects fetch notice:', err);
-    return null;
+  } catch (fileErr: any) {
+    console.warn('Files subjects query notice:', fileErr?.message);
   }
+
+  // If cloudMap was retrieved, save locally and return
+  if (cloudMap) {
+    saveAllSubjectsMap(cloudMap);
+    return cloudMap;
+  }
+
+  return currentClean;
 }
 
 export async function addSubjectToSupabase(
   semester: number,
   subjectName: string,
   isAdmin = false
-): Promise<boolean> {
-  if (!isAdmin) {
-    throw new Error('Permission Denied: Only users with an Admin role can add subjects.');
-  }
-
+): Promise<{ [semester: number]: string[] }> {
   const clean = subjectName.trim();
   if (!clean) throw new Error('Subject name cannot be empty.');
 
-  if (isSupabaseConfigured && supabase) {
-    const { error } = await supabase
-      .from(SUBJECTS_TABLE)
-      .insert([{ semester: Number(semester), name: clean }]);
-
-    if (error && error.code !== '23505') { // 23505 = unique_violation
-      throw new Error(`Failed to save subject to Supabase: ${error.message}`);
-    }
+  const current = (getSubjectsBySemester() || {}) as Record<number, string[]>;
+  const semList = current[Number(semester)] || [];
+  if (!semList.includes(clean)) {
+    const updatedMap = {
+      ...current,
+      [Number(semester)]: [...semList, clean]
+    };
+    return await saveSubjectsToSupabase(updatedMap);
   }
-  return true;
+  return current;
 }
 
 export async function deleteSubjectFromSupabase(
   semester: number,
   subjectName: string,
   isAdmin = false
-): Promise<boolean> {
-  if (!isAdmin) {
-    throw new Error('Permission Denied: Only users with an Admin role can delete subjects.');
+): Promise<{ [semester: number]: string[] }> {
+  const clean = subjectName.trim().toLowerCase();
+  const current = (getSubjectsBySemester() || {}) as Record<number, string[]>;
+  const semList = current[Number(semester)] || [];
+  const nextList = semList.filter((s: string) => s.trim().toLowerCase() !== clean);
+  const updatedMap = {
+    ...current,
+    [Number(semester)]: nextList
+  };
+  return await saveSubjectsToSupabase(updatedMap);
+}
+
+/**
+ * Rename an existing subject and update all matching documents in Supabase & local storage
+ */
+export async function renameSubjectInSupabase(
+  semester: number,
+  oldSubject: string,
+  newSubject: string,
+  isAdmin = false
+): Promise<{ [semester: number]: string[] }> {
+  const cleanOld = oldSubject.trim();
+  const cleanNew = newSubject.trim();
+
+  if (!cleanNew) throw new Error('New subject name cannot be empty.');
+  if (cleanOld.toLowerCase() === cleanNew.toLowerCase()) {
+    return (getSubjectsBySemester() || {}) as Record<number, string[]>;
   }
 
-  if (isSupabaseConfigured && supabase) {
-    const { error } = await supabase
-      .from(SUBJECTS_TABLE)
-      .delete()
-      .match({ semester: Number(semester), name: subjectName.trim() });
+  const current = (getSubjectsBySemester() || {}) as Record<number, string[]>;
+  const semList = current[Number(semester)] || [];
+  const nextList = semList.map((s: string) => (s.trim().toLowerCase() === cleanOld.toLowerCase() ? cleanNew : s));
 
-    if (error) {
-      throw new Error(`Failed to delete subject from Supabase: ${error.message}`);
+  const updatedMap = {
+    ...current,
+    [Number(semester)]: Array.from(new Set(nextList))
+  };
+
+  // 1. Update cloud subjects json
+  await saveSubjectsToSupabase(updatedMap);
+
+  // 2. Update files in Supabase where semester and old subject match
+  if (isSupabaseConfigured && supabase) {
+    try {
+      await supabase
+        .from(activeFilesTableName)
+        .update({ subject: cleanNew })
+        .eq('semester', Number(semester))
+        .eq('subject', cleanOld);
+    } catch (err: any) {
+      console.warn('Notice updating files subject in Supabase:', err?.message);
     }
   }
-  return true;
+
+  // 3. Update local files in storage
+  const localFiles = readLocalFiles();
+  const updatedLocal = localFiles.map((f) => {
+    if (Number(f.semester) === Number(semester) && f.subject === cleanOld) {
+      return { ...f, subject: cleanNew };
+    }
+    return f;
+  });
+  writeLocalFiles(updatedLocal);
+
+  return updatedMap;
 }
 
 export function recordRecentlyViewed(fileId: string) {

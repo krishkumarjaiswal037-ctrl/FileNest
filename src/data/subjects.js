@@ -9,68 +9,18 @@
 export const DEFAULT_SUBJECTS_BY_SEMESTER = {
   1: [
     "Engineering Mathematics-I",
-    "Engineering Physics",
-    "Programming in C",
-    "Basic Electrical Engineering",
-    "Engineering Graphics & Design",
-    "Technical English Communication"
+    "pps",
+    "Programming in C"
   ],
-  2: [
-    "Engineering Mathematics-II",
-    "Data Structures & Applications",
-    "Object Oriented Programming with C++",
-    "Digital Electronics",
-    "Environmental Science",
-    "Python Programming Lab"
-  ],
+  2: [],
   3: [
-    "Data Structures & Algorithms",
-    "Database Management Systems (DBMS)",
-    "Digital Logic & Computer Organization",
-    "Discrete Mathematics & Graph Theory",
-    "Object Oriented Programming in Java",
-    "Unix & Shell Programming"
+    "Data Structures & Algorithms"
   ],
-  4: [
-    "Operating Systems",
-    "Computer Networks",
-    "Design & Analysis of Algorithms (DAA)",
-    "Software Engineering",
-    "Microprocessors & Embedded Systems",
-    "Probability & Statistics for CSE"
-  ],
-  5: [
-    "Theory of Computation & Automata",
-    "Compiler Design",
-    "Artificial Intelligence",
-    "Web Technologies & Full-Stack Dev",
-    "Computer Graphics",
-    "Cloud Computing Fundamentals"
-  ],
-  6: [
-    "Machine Learning",
-    "Cryptography & Network Security",
-    "Distributed Systems",
-    "Data Mining & Warehousing",
-    "Mobile Application Development",
-    "DevOps & Microservices"
-  ],
-  7: [
-    "Deep Learning & Neural Networks",
-    "Big Data Analytics",
-    "Internet of Things (IoT)",
-    "Natural Language Processing",
-    "System Design & Scalability",
-    "Major Project Phase-I"
-  ],
-  8: [
-    "High Performance Computing",
-    "Blockchain Architecture",
-    "Information Retrieval",
-    "Cyber Forensics & Ethical Hacking",
-    "Industry Internship Seminar",
-    "Major Project Phase-II"
-  ]
+  4: [],
+  5: [],
+  6: [],
+  7: [],
+  8: []
 };
 
 export const FILE_CATEGORIES = [
@@ -88,33 +38,35 @@ export const FILE_CATEGORIES = [
 
 export const SEMESTER_LIST = [1, 2, 3, 4, 5, 6, 7, 8];
 
-const CUSTOM_SUBJECTS_STORAGE_KEY = "studyvault_cse_subjects_v2";
+const CUSTOM_SUBJECTS_STORAGE_KEY = "studyvault_cse_subjects_v3";
 
 /**
  * Retrieve semester-wise subjects.
- * Never regenerates deleted subjects if user emptied a semester.
+ * Strictly respects empty semesters: never regenerates deleted subjects.
  */
 export function getSubjectsBySemester() {
   try {
-    const saved = localStorage.getItem(CUSTOM_SUBJECTS_STORAGE_KEY);
-    if (saved) {
-      const parsed = JSON.parse(saved);
-      if (parsed && typeof parsed === 'object') {
-        const result = {};
-        for (const sem of SEMESTER_LIST) {
-          if (Array.isArray(parsed[sem]) && parsed[sem].length > 0) {
-            result[sem] = parsed[sem];
-          } else {
-            result[sem] = [...(DEFAULT_SUBJECTS_BY_SEMESTER[sem] || [])];
+    if (typeof localStorage !== 'undefined') {
+      const saved = localStorage.getItem(CUSTOM_SUBJECTS_STORAGE_KEY);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed && typeof parsed === 'object') {
+          const result = {};
+          for (const sem of SEMESTER_LIST) {
+            if (Array.isArray(parsed[sem])) {
+              result[sem] = parsed[sem];
+            } else {
+              result[sem] = [...(DEFAULT_SUBJECTS_BY_SEMESTER[sem] || [])];
+            }
           }
+          return result;
         }
-        return result;
       }
     }
   } catch (err) {
     console.error("Failed to read custom subjects:", err);
   }
-  // Return standard default subjects initially if no custom/database record exists
+  // Return clean initial subjects initially
   const initial = {};
   for (const sem of SEMESTER_LIST) {
     initial[sem] = [...(DEFAULT_SUBJECTS_BY_SEMESTER[sem] || [])];
@@ -132,7 +84,9 @@ export function saveSubjectsForSemester(semester, subjectList) {
     [Number(semester)]: Array.from(new Set((subjectList || []).map((s) => s.trim()).filter(Boolean)))
   };
   try {
-    localStorage.setItem(CUSTOM_SUBJECTS_STORAGE_KEY, JSON.stringify(updated));
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem(CUSTOM_SUBJECTS_STORAGE_KEY, JSON.stringify(updated));
+    }
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('filenest_subjects_updated', { detail: updated }));
     }
@@ -143,7 +97,7 @@ export function saveSubjectsForSemester(semester, subjectList) {
 }
 
 /**
- * Add a single custom subject to a semester (Admin-Guarded)
+ * Add a single custom subject to a semester
  */
 export function addCustomSubjectToSemester(semester, newSubject) {
   const clean = newSubject.trim();
@@ -157,7 +111,7 @@ export function addCustomSubjectToSemester(semester, newSubject) {
 }
 
 /**
- * Remove a single subject from a semester (Admin-Guarded)
+ * Remove a single subject from a semester
  */
 export function removeCustomSubjectFromSemester(semester, subjectToRemove) {
   const clean = subjectToRemove.trim().toLowerCase();
@@ -168,18 +122,20 @@ export function removeCustomSubjectFromSemester(semester, subjectToRemove) {
 }
 
 /**
- * Store the complete subjects map (e.g. synchronized from Supabase)
+ * Store the complete subjects map (synchronized directly with cloud storage)
  */
 export function saveAllSubjectsMap(subjectsMap) {
   const current = getSubjectsBySemester();
   const cleanMap = {};
   for (const sem of SEMESTER_LIST) {
-    cleanMap[sem] = Array.isArray(subjectsMap[sem]) && subjectsMap[sem].length > 0
+    cleanMap[sem] = Array.isArray(subjectsMap[sem])
       ? subjectsMap[sem]
-      : (current[sem] || [...(DEFAULT_SUBJECTS_BY_SEMESTER[sem] || [])]);
+      : (current[sem] || []);
   }
   try {
-    localStorage.setItem(CUSTOM_SUBJECTS_STORAGE_KEY, JSON.stringify(cleanMap));
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem(CUSTOM_SUBJECTS_STORAGE_KEY, JSON.stringify(cleanMap));
+    }
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('filenest_subjects_updated', { detail: cleanMap }));
     }
@@ -190,14 +146,16 @@ export function saveAllSubjectsMap(subjectsMap) {
 }
 
 /**
- * Reset subjects to default B.Tech CSE curriculum
+ * Reset subjects to clean state
  */
 export function resetSubjectsToDefault() {
   const initial = {};
   for (const sem of SEMESTER_LIST) {
     initial[sem] = [...(DEFAULT_SUBJECTS_BY_SEMESTER[sem] || [])];
   }
-  localStorage.setItem(CUSTOM_SUBJECTS_STORAGE_KEY, JSON.stringify(initial));
+  if (typeof localStorage !== 'undefined') {
+    localStorage.setItem(CUSTOM_SUBJECTS_STORAGE_KEY, JSON.stringify(initial));
+  }
   return initial;
 }
 

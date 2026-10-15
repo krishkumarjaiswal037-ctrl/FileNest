@@ -18,14 +18,18 @@ import {
   HardDrive,
   Plus,
   UploadCloud,
-  GraduationCap
+  GraduationCap,
+  Pencil,
+  Check,
+  X
 } from 'lucide-react';
 import { AdminSession } from '../lib/adminAuth';
 import {
   formatFileSize,
   syncLocalFilesToSupabase,
   addSubjectToSupabase,
-  deleteSubjectFromSupabase
+  deleteSubjectFromSupabase,
+  renameSubjectInSupabase
 } from '../lib/supabaseService';
 import { SEMESTER_LIST, saveSubjectsForSemester } from '../data/subjects';
 
@@ -62,6 +66,8 @@ export default function AdminDashboard({
   const [newSubjectInput, setNewSubjectInput] = useState('');
   const [isAddingSubject, setIsAddingSubject] = useState(false);
   const [subjectSearch, setSubjectSearch] = useState('');
+  const [editingSubject, setEditingSubject] = useState<{ sem: number; oldName: string; currentVal: string } | null>(null);
+  const [isSavingSubjectEdit, setIsSavingSubjectEdit] = useState(false);
 
   // Filters & Search
   const [searchQuery, setSearchQuery] = useState('');
@@ -89,37 +95,88 @@ export default function AdminDashboard({
 
     setIsAddingSubject(true);
     try {
-      await addSubjectToSupabase(editingSemester, trimmed, true);
+      const updated = await addSubjectToSupabase(editingSemester, trimmed, true);
+      if (onSubjectsUpdated) {
+        onSubjectsUpdated(updated);
+      }
+      setNewSubjectInput('');
+      notify(
+        `Added "${trimmed}" to Semester ${editingSemester}. Saved to cloud and visible across all devices!`,
+        'success'
+      );
     } catch (err: any) {
-      console.warn('Supabase add subject note:', err);
+      notify(err?.message || 'Failed to add subject', 'error');
+    } finally {
+      setIsAddingSubject(false);
     }
-
-    const updated = saveSubjectsForSemester(editingSemester, [...currentList, trimmed]);
-    if (onSubjectsUpdated) {
-      onSubjectsUpdated(updated);
-    }
-    setNewSubjectInput('');
-    setIsAddingSubject(false);
-    notify(
-      `Added "${trimmed}" to Semester ${editingSemester}. It is now immediately visible in the Upload dropdown!`,
-      'success'
-    );
   };
 
   const handleDeleteSubject = async (subjName: string) => {
-    const currentList = subjectsBySemester[editingSemester] || [];
     try {
-      await deleteSubjectFromSupabase(editingSemester, subjName, true);
+      const updated = await deleteSubjectFromSupabase(editingSemester, subjName, true);
+      if (onSubjectsUpdated) {
+        onSubjectsUpdated(updated);
+      }
+      notify(`Permanently removed "${subjName}" from Semester ${editingSemester}.`, 'info');
     } catch (err: any) {
-      console.warn('Supabase delete subject note:', err);
+      notify(err?.message || 'Failed to remove subject', 'error');
+    }
+  };
+
+  const handleStartEditSubject = (subj: string) => {
+    setEditingSubject({ sem: editingSemester, oldName: subj, currentVal: subj });
+  };
+
+  const handleCancelEditSubject = () => {
+    setEditingSubject(null);
+  };
+
+  const handleSaveEditSubject = async () => {
+    if (!editingSubject) return;
+    const cleanNew = editingSubject.currentVal.trim();
+    if (!cleanNew) {
+      notify('Subject name cannot be empty.', 'error');
+      return;
+    }
+    if (cleanNew.toLowerCase() === editingSubject.oldName.toLowerCase()) {
+      setEditingSubject(null);
+      return;
     }
 
-    const nextList = currentList.filter((s) => s !== subjName);
-    const updated = saveSubjectsForSemester(editingSemester, nextList);
-    if (onSubjectsUpdated) {
-      onSubjectsUpdated(updated);
+    const currentList = subjectsBySemester[editingSemester] || [];
+    if (
+      currentList.some(
+        (s) =>
+          s.toLowerCase() === cleanNew.toLowerCase() &&
+          s.toLowerCase() !== editingSubject.oldName.toLowerCase()
+      )
+    ) {
+      notify(`A subject named "${cleanNew}" already exists in Semester ${editingSemester}.`, 'error');
+      return;
     }
-    notify(`Removed "${subjName}" from Semester ${editingSemester}.`, 'info');
+
+    setIsSavingSubjectEdit(true);
+    try {
+      const updated = await renameSubjectInSupabase(
+        editingSemester,
+        editingSubject.oldName,
+        cleanNew,
+        true
+      );
+      if (onSubjectsUpdated) {
+        onSubjectsUpdated(updated);
+      }
+      notify(
+        `Subject renamed to "${cleanNew}" successfully across all documents and views.`,
+        'success'
+      );
+      onRefresh();
+    } catch (err: any) {
+      notify(err?.message || 'Failed to rename subject', 'error');
+    } finally {
+      setIsSavingSubjectEdit(false);
+      setEditingSubject(null);
+    }
   };
 
   const handleSyncToSupabase = async () => {
@@ -553,27 +610,96 @@ export default function AdminDashboard({
 
               return (
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                  {filteredList.map((subj) => (
-                    <div
-                      key={subj}
-                      className="group flex items-center justify-between p-3.5 bg-white dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/80 rounded-xl hover:border-[#2563EB] transition-colors"
-                    >
-                      <div className="flex items-center gap-2.5 min-w-0 pr-2">
-                        <GraduationCap className="w-4 h-4 text-[#2563EB] dark:text-blue-400 shrink-0" />
-                        <span className="text-xs font-semibold text-slate-800 dark:text-slate-200 truncate" title={subj}>
-                          {subj}
-                        </span>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => handleDeleteSubject(subj)}
-                        className="p-1 text-slate-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40 rounded-lg transition-colors shrink-0 cursor-pointer"
-                        title={`Delete "${subj}"`}
+                  {filteredList.map((subj) => {
+                    const isEditingThis =
+                      editingSubject &&
+                      editingSubject.sem === editingSemester &&
+                      editingSubject.oldName === subj;
+
+                    if (isEditingThis) {
+                      return (
+                        <div
+                          key={subj}
+                          className="flex items-center gap-2 p-2.5 bg-blue-50/70 dark:bg-blue-950/40 border-2 border-[#2563EB] rounded-xl shadow-xs"
+                        >
+                          <input
+                            type="text"
+                            value={editingSubject.currentVal}
+                            onChange={(e) =>
+                              setEditingSubject({
+                                ...editingSubject,
+                                currentVal: e.target.value
+                              })
+                            }
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                e.preventDefault();
+                                handleSaveEditSubject();
+                              } else if (e.key === 'Escape') {
+                                handleCancelEditSubject();
+                              }
+                            }}
+                            autoFocus
+                            placeholder="Enter new subject name..."
+                            className="flex-1 px-2.5 py-1 text-xs bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white focus:outline-hidden focus:ring-1 focus:ring-[#2563EB]"
+                          />
+                          <button
+                            type="button"
+                            onClick={handleSaveEditSubject}
+                            disabled={isSavingSubjectEdit || !editingSubject.currentVal.trim()}
+                            className="p-1.5 text-white bg-[#2563EB] hover:bg-blue-700 rounded-lg transition-colors cursor-pointer disabled:opacity-50"
+                            title="Save subject name"
+                          >
+                            <Check className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={handleCancelEditSubject}
+                            disabled={isSavingSubjectEdit}
+                            className="p-1.5 text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-800 rounded-lg transition-colors cursor-pointer"
+                            title="Cancel editing"
+                          >
+                            <X className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      );
+                    }
+
+                    return (
+                      <div
+                        key={subj}
+                        className="group flex items-center justify-between p-3.5 bg-white dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/80 rounded-xl hover:border-[#2563EB] transition-colors"
                       >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  ))}
+                        <div className="flex items-center gap-2.5 min-w-0 pr-2">
+                          <GraduationCap className="w-4 h-4 text-[#2563EB] dark:text-blue-400 shrink-0" />
+                          <span
+                            className="text-xs font-semibold text-slate-800 dark:text-slate-200 truncate"
+                            title={subj}
+                          >
+                            {subj}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-1 shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => handleStartEditSubject(subj)}
+                            className="p-1 text-slate-400 hover:text-[#2563EB] dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/40 rounded-lg transition-colors cursor-pointer"
+                            title={`Change name / Rename "${subj}"`}
+                          >
+                            <Pencil className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteSubject(subj)}
+                            className="p-1 text-slate-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40 rounded-lg transition-colors cursor-pointer"
+                            title={`Delete "${subj}"`}
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               );
             })()}

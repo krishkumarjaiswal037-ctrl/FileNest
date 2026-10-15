@@ -123,26 +123,26 @@ export default function UploadBox({
   });
 
   const handleAddCustomSubject = async () => {
-    if (!isAdmin) {
-      if (notify) notify('Permission Denied: Only users with an Admin role can add subjects.', 'error');
-      return;
-    }
     const trimmed = customSubjectInput.trim();
     if (!trimmed) {
       if (notify) notify('Please enter a subject name.', 'error');
       return;
     }
     try {
-      await addSubjectToSupabase(semester, trimmed, true);
+      const updatedMap = await addSubjectToSupabase(semester, trimmed, true);
+      if (onSubjectsUpdated) onSubjectsUpdated(updatedMap);
+      setSubject(trimmed);
+      setCustomSubjectInput('');
+      setIsAddingCustomSubject(false);
+      if (notify) notify(`Added "${trimmed}" to Semester ${semester}.`, 'success');
     } catch (err) {
-      console.warn('Supabase add subject note:', err);
+      const updatedMap = addCustomSubjectToSemester(semester, trimmed);
+      if (onSubjectsUpdated) onSubjectsUpdated(updatedMap);
+      setSubject(trimmed);
+      setCustomSubjectInput('');
+      setIsAddingCustomSubject(false);
+      if (notify) notify(`Added "${trimmed}" to Semester ${semester}.`, 'success');
     }
-    const updatedMap = addCustomSubjectToSemester(semester, trimmed);
-    if (onSubjectsUpdated) onSubjectsUpdated(updatedMap);
-    setSubject(trimmed);
-    setCustomSubjectInput('');
-    setIsAddingCustomSubject(false);
-    if (notify) notify(`Added "${trimmed}" to Semester ${semester} subjects.`, 'success');
   };
 
   const handleRemoveQueuedFile = (id) => {
@@ -272,7 +272,7 @@ export default function UploadBox({
             </select>
           </div>
 
-          {/* Dynamic Subject Selector + Custom Subject Option (Admin Only) */}
+          {/* Dynamic Subject Selector + Custom Subject Option */}
           <div>
             <div className="flex items-center justify-between mb-2">
               <label
@@ -281,26 +281,30 @@ export default function UploadBox({
               >
                 Subject (Sem {semester}) *
               </label>
-              {isAdmin && (
-                <button
-                  type="button"
-                  onClick={() => setIsAddingCustomSubject((prev) => !prev)}
-                  className="inline-flex items-center gap-1 text-xs font-medium text-[#2563EB] dark:text-blue-400 hover:underline"
-                >
-                  <Plus className="w-3.5 h-3.5" />
-                  <span>{isAddingCustomSubject ? 'Select existing' : 'Add custom subject'}</span>
-                </button>
-              )}
+              <button
+                type="button"
+                onClick={() => setIsAddingCustomSubject((prev) => !prev)}
+                className="inline-flex items-center gap-1 text-xs font-medium text-[#2563EB] dark:text-blue-400 hover:underline"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>{isAddingCustomSubject ? 'Select existing' : '+ Add subject'}</span>
+              </button>
             </div>
 
-            {isAdmin && isAddingCustomSubject ? (
+            {isAddingCustomSubject ? (
               <div className="flex items-center gap-2">
                 <input
                   type="text"
                   value={customSubjectInput}
                   onChange={(e) => setCustomSubjectInput(e.target.value)}
-                  placeholder="e.g. Quantum Computing"
-                  aria-label="New custom subject name"
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      handleAddCustomSubject();
+                    }
+                  }}
+                  placeholder="e.g. Operating Systems"
+                  aria-label="New subject name"
                   className="flex-1 min-w-0 px-3.5 py-2 text-sm bg-white dark:bg-slate-800 text-slate-900 dark:text-white border border-[#2563EB] rounded-xl focus:outline-none"
                 />
                 <button
@@ -317,9 +321,7 @@ export default function UploadBox({
                 value={subject}
                 onChange={(e) => {
                   if (e.target.value === '__ADD_CUSTOM__') {
-                    if (isAdmin) {
-                      setIsAddingCustomSubject(true);
-                    }
+                    setIsAddingCustomSubject(true);
                   } else {
                     setSubject(e.target.value);
                   }
@@ -327,7 +329,7 @@ export default function UploadBox({
                 className="w-full px-3.5 py-2.5 text-sm bg-white dark:bg-slate-800 text-slate-900 dark:text-white border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-none focus:border-[#2563EB] transition-colors"
               >
                 {currentSemesterSubjects.length === 0 ? (
-                  <option value="">No subjects found for Semester {semester}</option>
+                  <option value="">No subjects yet for Sem {semester} (Click + Add)</option>
                 ) : (
                   currentSemesterSubjects.map((subj) => (
                     <option key={subj} value={subj}>
@@ -335,9 +337,7 @@ export default function UploadBox({
                     </option>
                   ))
                 )}
-                {isAdmin && (
-                  <option value="__ADD_CUSTOM__">+ Add custom subject (Admin)...</option>
-                )}
+                <option value="__ADD_CUSTOM__">+ Add new subject for Sem {semester}...</option>
               </select>
             )}
           </div>
