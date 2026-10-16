@@ -1,5 +1,6 @@
 import express from 'express';
 import path from 'path';
+import fs from 'fs';
 import { fileURLToPath } from 'url';
 import { createServer as createViteServer } from 'vite';
 import { GoogleGenAI, GenerateVideosOperation } from '@google/genai';
@@ -194,6 +195,169 @@ app.post('/api/video-download', async (req, res) => {
   } catch (err: any) {
     console.error('Veo download error:', err?.message);
     return res.status(500).json({ error: err?.message || 'Failed to download generated video.' });
+  }
+});
+
+// ============================================================================
+// SHARED PERSISTENT CURRICULUM SUBJECTS STORAGE (ALL USERS & DEVICES)
+// ============================================================================
+const SUBJECTS_DATA_FILE = path.resolve(__dirname, 'data', 'curriculum_subjects.json');
+
+// Ensure data folder exists
+if (!fs.existsSync(path.dirname(SUBJECTS_DATA_FILE))) {
+  fs.mkdirSync(path.dirname(SUBJECTS_DATA_FILE), { recursive: true });
+}
+
+const DEFAULT_BASELINE_SUBJECTS: { [sem: number]: string[] } = {
+  1: ["Engineering Mathematics-I", "pps", "Programming in C"],
+  2: [],
+  3: ["Data Structures & Algorithms"],
+  4: [],
+  5: [],
+  6: [],
+  7: [],
+  8: []
+};
+
+function readServerSubjects(): { [sem: number]: string[] } {
+  try {
+    if (fs.existsSync(SUBJECTS_DATA_FILE)) {
+      const raw = fs.readFileSync(SUBJECTS_DATA_FILE, 'utf-8');
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === 'object') {
+        const result: { [sem: number]: string[] } = {};
+        for (let s = 1; s <= 8; s++) {
+          result[s] = Array.isArray(parsed[s])
+            ? Array.from(new Set(parsed[s].map((x: any) => String(x).trim()).filter(Boolean)))
+            : [];
+        }
+        return result;
+      }
+    }
+  } catch (err) {
+    console.warn('Error reading server subjects file:', err);
+  }
+  return { ...DEFAULT_BASELINE_SUBJECTS };
+}
+
+function writeServerSubjects(subjectsMap: { [sem: number]: string[] }) {
+  const clean: { [sem: number]: string[] } = {};
+  for (let s = 1; s <= 8; s++) {
+    clean[s] = Array.isArray(subjectsMap[s])
+      ? Array.from(new Set(subjectsMap[s].map((x: any) => String(x).trim()).filter(Boolean)))
+      : [];
+  }
+  fs.writeFileSync(SUBJECTS_DATA_FILE, JSON.stringify(clean, null, 2), 'utf-8');
+  return clean;
+}
+
+/**
+ * GET /api/curriculum-subjects
+ * Returns the current shared subjects map for all 8 semesters.
+ * Visible to all students, friends, and devices.
+ */
+app.get('/api/curriculum-subjects', (_req, res) => {
+  const subjects = readServerSubjects();
+  return res.json({ subjects });
+});
+
+/**
+ * POST /api/curriculum-subjects
+ * Saves updated subjects map directly to shared server storage.
+ * Ensures any change made by Admin is immediately visible to all visitors.
+ */
+app.post('/api/curriculum-subjects', (req, res) => {
+  const { subjects } = req.body;
+  if (!subjects || typeof subjects !== 'object') {
+    return res.status(400).json({ error: 'Valid subjects map is required.' });
+  }
+
+  try {
+    const updated = writeServerSubjects(subjects);
+    return res.json({ success: true, subjects: updated });
+  } catch (err: any) {
+    console.error('Error updating subjects on server:', err);
+    return res.status(500).json({ error: err?.message || 'Failed to persist subjects.' });
+  }
+});
+
+// ============================================================================
+// SHARED PERSISTENT ADMIN ACCOUNTS REGISTRY (MULTI-ADMIN & CROSS-DEVICE)
+// ============================================================================
+const ADMIN_ACCOUNTS_FILE = path.resolve(__dirname, 'data', 'admin_accounts.json');
+
+function readServerAdminAccounts(): any[] {
+  try {
+    if (fs.existsSync(ADMIN_ACCOUNTS_FILE)) {
+      const raw = fs.readFileSync(ADMIN_ACCOUNTS_FILE, 'utf-8');
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) return parsed;
+    }
+  } catch (err) {
+    console.warn('Error reading admin accounts file:', err);
+  }
+  return [];
+}
+
+function writeServerAdminAccounts(accounts: any[]) {
+  fs.writeFileSync(ADMIN_ACCOUNTS_FILE, JSON.stringify(accounts, null, 2), 'utf-8');
+}
+
+/**
+ * GET /api/admin/accounts
+ * Returns public metadata of all registered admin accounts (excludes secret hashes)
+ */
+app.get('/api/admin/accounts', (_req, res) => {
+  const accounts = readServerAdminAccounts();
+  const publicList = accounts.map((a) => ({
+    username: a.username,
+    email: a.email,
+    fullName: a.fullName,
+    createdAt: a.createdAt,
+    lastLoginAt: a.lastLoginAt
+  }));
+  return res.json({ accounts: publicList, total: publicList.length });
+});
+
+/**
+ * POST /api/admin/register
+ * Persists an admin account record to server so admin can log in from any device or email
+ */
+app.post('/api/admin/register', (req, res) => {
+  const { account } = req.body;
+  if (!account || !account.username || !account.email || !account.hashHex || !account.saltHex) {
+    return res.status(400).json({ error: 'Valid admin account credentials are required.' });
+  }
+
+  try {
+    const existing = readServerAdminAccounts();
+    const cleanUser = String(account.username).trim().toLowerCase();
+    const cleanEmail = String(account.email).trim().toLowerCase();
+
+    // Replace if exists, or append new admin
+    const filtered = existing.filter(
+      (a) => a.username?.toLowerCase() !== cleanUser && a.email?.toLowerCase() !== cleanEmail
+    );
+    const updated = [...filtered, account];
+    writeServerAdminAccounts(updated);
+
+    return res.json({ success: true, count: updated.length });
+  } catch (err: any) {
+    console.error('Error saving admin account on server:', err);
+    return res.status(500).json({ error: err?.message || 'Failed to save admin account.' });
+  }
+});
+
+/**
+ * POST /api/admin/reset
+ * Wipes registered admin accounts allowing fresh re-registration
+ */
+app.post('/api/admin/reset', (_req, res) => {
+  try {
+    writeServerAdminAccounts([]);
+    return res.json({ success: true, message: 'All admin accounts reset successfully.' });
+  } catch (err: any) {
+    return res.status(500).json({ error: err?.message || 'Failed to reset admin accounts.' });
   }
 });
 

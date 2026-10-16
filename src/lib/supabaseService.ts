@@ -832,28 +832,38 @@ export async function saveSubjectsToSupabase(
       : [];
   }
 
-  // 1. Save to local storage & broadcast event
+  // 1. Save to local storage & broadcast event immediately
   saveAllSubjectsMap(cleanMap);
 
-  // 2. Persist to Supabase Storage bucket so all devices see the changes
+  // 2. Persist directly to shared server storage (/api/curriculum-subjects)
+  // This guarantees ANY device, visitor, or friend immediately sees the change!
+  try {
+    const res = await fetch('/api/curriculum-subjects', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ subjects: cleanMap })
+    });
+    if (!res.ok) {
+      console.warn('Server subjects API response was not OK:', res.status);
+    }
+  } catch (apiErr: any) {
+    console.warn('Server subjects persist notice:', apiErr?.message);
+  }
+
+  // 3. Best-effort sync to Supabase Storage bucket & subjects table
   if (isSupabaseConfigured && supabase) {
     try {
       const jsonContent = JSON.stringify(cleanMap, null, 2);
-      const { error: uploadErr } = await supabase.storage
+      await supabase.storage
         .from(STORAGE_BUCKET)
         .upload(CURRICULUM_CLOUD_FILE, jsonContent, {
           contentType: 'application/json',
           upsert: true
         });
-
-      if (uploadErr) {
-        console.warn('Supabase storage subject upload notice:', uploadErr.message);
-      }
     } catch (err: any) {
-      console.warn('Failed to upload subjects to Supabase storage:', err?.message);
+      // non-blocking
     }
 
-    // Try optional SUBJECTS_TABLE sync (non-blocking)
     try {
       for (const sem of [1, 2, 3, 4, 5, 6, 7, 8]) {
         for (const name of cleanMap[sem]) {
@@ -869,8 +879,8 @@ export async function saveSubjectsToSupabase(
 }
 
 /**
- * Fetch subjects strictly from Supabase cloud storage and real uploaded files.
- * NEVER re-injects 48 dummy default subjects.
+ * Fetch subjects strictly from shared cloud server storage and real uploaded files.
+ * Synchronizes across all users, admins, and friends' devices.
  */
 export async function fetchSubjectsFromSupabase(): Promise<{ [semester: number]: string[] } | null> {
   const baseMap = (getSubjectsBySemester() || {}) as Record<number, string[]>;
@@ -879,56 +889,74 @@ export async function fetchSubjectsFromSupabase(): Promise<{ [semester: number]:
     currentClean[s] = Array.isArray(baseMap[s]) ? [...baseMap[s]] : [];
   }
 
-  if (!isSupabaseConfigured || !supabase) {
-    return currentClean;
-  }
-
   let cloudMap: { [sem: number]: string[] } | null = null;
 
-  // 1. Try to download curriculum_subjects.json from Supabase Storage
+  // 1. Fetch from shared server storage (/api/curriculum-subjects)
   try {
-    const { data, error } = await supabase.storage
-      .from(STORAGE_BUCKET)
-      .download(CURRICULUM_CLOUD_FILE);
-
-    if (!error && data) {
-      const text = await data.text();
-      const parsed = JSON.parse(text);
-      if (parsed && typeof parsed === 'object') {
+    const res = await fetch('/api/curriculum-subjects');
+    if (res.ok) {
+      const data = await res.json();
+      if (data && data.subjects && typeof data.subjects === 'object') {
         cloudMap = {};
         for (let s = 1; s <= 8; s++) {
-          cloudMap[s] = Array.isArray(parsed[s])
-            ? Array.from(new Set(parsed[s].map((x: any) => String(x).trim()).filter(Boolean)))
+          cloudMap[s] = Array.isArray(data.subjects[s])
+            ? Array.from(new Set(data.subjects[s].map((x: any) => String(x).trim()).filter(Boolean)))
             : [];
         }
       }
     }
-  } catch (dlErr: any) {
-    console.warn('Supabase storage download notice:', dlErr?.message);
+  } catch (apiErr: any) {
+    console.warn('Notice fetching /api/curriculum-subjects:', apiErr?.message);
   }
 
-  // 2. Fetch distinct subjects from real uploaded files in Supabase
-  try {
-    const { data: fileRows } = await supabase
-      .from(activeFilesTableName)
-      .select('semester, subject');
+  // 2. Fallback check from Supabase Storage if server returned empty
+  if (!cloudMap && isSupabaseConfigured && supabase) {
+    try {
+      const { data, error } = await supabase.storage
+        .from(STORAGE_BUCKET)
+        .download(CURRICULUM_CLOUD_FILE);
 
-    if (Array.isArray(fileRows) && fileRows.length > 0) {
-      const targetMap = cloudMap || currentClean;
-      fileRows.forEach((row: any) => {
-        const sem = Number(row.semester);
-        const subj = row.subject && typeof row.subject === 'string' ? row.subject.trim() : '';
-        if (sem >= 1 && sem <= 8 && subj) {
-          if (!targetMap[sem]) targetMap[sem] = [];
-          if (!targetMap[sem].includes(subj)) {
-            targetMap[sem].push(subj);
+      if (!error && data) {
+        const text = await data.text();
+        const parsed = JSON.parse(text);
+        if (parsed && typeof parsed === 'object') {
+          cloudMap = {};
+          for (let s = 1; s <= 8; s++) {
+            cloudMap[s] = Array.isArray(parsed[s])
+              ? Array.from(new Set(parsed[s].map((x: any) => String(x).trim()).filter(Boolean)))
+              : [];
           }
         }
-      });
-      cloudMap = targetMap;
+      }
+    } catch (dlErr: any) {
+      console.warn('Supabase storage download notice:', dlErr?.message);
     }
-  } catch (fileErr: any) {
-    console.warn('Files subjects query notice:', fileErr?.message);
+  }
+
+  // 3. Fetch distinct subjects from real uploaded files in Supabase so file subjects are never lost
+  if (isSupabaseConfigured && supabase) {
+    try {
+      const { data: fileRows } = await supabase
+        .from(activeFilesTableName)
+        .select('semester, subject');
+
+      if (Array.isArray(fileRows) && fileRows.length > 0) {
+        const targetMap = cloudMap || currentClean;
+        fileRows.forEach((row: any) => {
+          const sem = Number(row.semester);
+          const subj = row.subject && typeof row.subject === 'string' ? row.subject.trim() : '';
+          if (sem >= 1 && sem <= 8 && subj) {
+            if (!targetMap[sem]) targetMap[sem] = [];
+            if (!targetMap[sem].includes(subj)) {
+              targetMap[sem].push(subj);
+            }
+          }
+        });
+        cloudMap = targetMap;
+      }
+    } catch (fileErr: any) {
+      console.warn('Files subjects query notice:', fileErr?.message);
+    }
   }
 
   // If cloudMap was retrieved, save locally and return

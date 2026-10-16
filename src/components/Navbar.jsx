@@ -251,7 +251,7 @@ export default function Navbar({
                 </div>
                 {item.isAi && (
                   <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-blue-100 dark:bg-blue-950 text-[#2563EB] dark:text-blue-300">
-                    Gemini &amp; Video
+                    Gemini AI
                   </span>
                 )}
               </NavLink>

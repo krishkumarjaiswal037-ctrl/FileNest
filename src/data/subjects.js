@@ -90,6 +90,13 @@ export function saveSubjectsForSemester(semester, subjectList) {
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('filenest_subjects_updated', { detail: updated }));
     }
+    if (typeof fetch !== 'undefined') {
+      fetch('/api/curriculum-subjects', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ subjects: updated })
+      }).catch((e) => console.warn('Could not sync subjects to server:', e?.message));
+    }
   } catch (e) {
     console.warn("Storage save failed:", e);
   }
@@ -139,6 +146,13 @@ export function saveAllSubjectsMap(subjectsMap) {
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('filenest_subjects_updated', { detail: cleanMap }));
     }
+    if (typeof fetch !== 'undefined') {
+      fetch('/api/curriculum-subjects', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ subjects: cleanMap })
+      }).catch((e) => console.warn('Could not sync subjects to server:', e?.message));
+    }
   } catch (e) {
     console.warn("Storage save failed:", e);
   }
@@ -155,6 +169,16 @@ export function resetSubjectsToDefault() {
   }
   if (typeof localStorage !== 'undefined') {
     localStorage.setItem(CUSTOM_SUBJECTS_STORAGE_KEY, JSON.stringify(initial));
+  }
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('filenest_subjects_updated', { detail: initial }));
+  }
+  if (typeof fetch !== 'undefined') {
+    fetch('/api/curriculum-subjects', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ subjects: initial })
+    }).catch((e) => console.warn('Could not sync reset subjects to server:', e?.message));
   }
   return initial;
 }

@@ -59,7 +59,7 @@ export default function App() {
     getSubjectsBySemester()
   );
 
-  // Synchronize subjects whenever updated anywhere across the app
+  // Synchronize subjects whenever updated anywhere across the app or on another device
   useEffect(() => {
     const handleSubjectsChange = (e: any) => {
       if (e.detail && typeof e.detail === 'object') {
@@ -67,8 +67,30 @@ export default function App() {
       }
     };
     window.addEventListener('filenest_subjects_updated', handleSubjectsChange);
+
+    // Periodically sync subjects from shared cloud storage so friends & all devices see updates
+    const syncCloudSubjects = async () => {
+      try {
+        const cloud = await fetchSubjectsFromSupabase();
+        if (cloud && typeof cloud === 'object') {
+          setSubjectsBySemester(cloud);
+        }
+      } catch {
+        // non-blocking
+      }
+    };
+
+    const handleWindowFocus = () => {
+      syncCloudSubjects();
+    };
+
+    window.addEventListener('focus', handleWindowFocus);
+    const interval = setInterval(syncCloudSubjects, 15000);
+
     return () => {
       window.removeEventListener('filenest_subjects_updated', handleSubjectsChange);
+      window.removeEventListener('focus', handleWindowFocus);
+      clearInterval(interval);
     };
   }, []);
 
