@@ -5,17 +5,15 @@ import {
   FileText,
   Image as ImageIcon,
   X,
-  Plus,
   CheckCircle2,
   AlertCircle,
   Loader2
 } from 'lucide-react';
 import {
   SEMESTER_LIST,
-  FILE_CATEGORIES,
-  addCustomSubjectToSemester
+  FILE_CATEGORIES
 } from '../data/subjects';
-import { uploadStudyFile, formatFileSize, addSubjectToSupabase } from '../lib/supabaseService';
+import { uploadStudyFile, formatFileSize } from '../lib/supabaseService';
 
 const MAX_FILE_SIZE_BYTES = 50 * 1024 * 1024; // 50 MB
 const ACCEPTED_MIME_TYPES = {
@@ -31,7 +29,7 @@ const ACCEPTED_MIME_TYPES = {
 /**
  * Reusable Multi-File UploadBox Component (src/components/UploadBox.jsx)
  * Supports drag-and-drop, file validation (PDF, JPG, JPEG, PNG, WEBP, MP4, WEBM up to 50 MB),
- * individual file progress bars, dynamic semester-wise subject selector, and admin-only custom subject creation.
+ * individual file progress bars, dynamic semester-wise subject selector.
  */
 export default function UploadBox({
   subjectsBySemester,
@@ -42,8 +40,6 @@ export default function UploadBox({
 }) {
   const [semester, setSemester] = useState(3);
   const [subject, setSubject] = useState('');
-  const [isAddingCustomSubject, setIsAddingCustomSubject] = useState(false);
-  const [customSubjectInput, setCustomSubjectInput] = useState('');
   const [category, setCategory] = useState(FILE_CATEGORIES[0]);
   const [title, setTitle] = useState('');
   const [tags, setTags] = useState('');
@@ -121,29 +117,6 @@ export default function UploadBox({
     maxSize: MAX_FILE_SIZE_BYTES,
     noClick: true
   });
-
-  const handleAddCustomSubject = async () => {
-    const trimmed = customSubjectInput.trim();
-    if (!trimmed) {
-      if (notify) notify('Please enter a subject name.', 'error');
-      return;
-    }
-    try {
-      const updatedMap = await addSubjectToSupabase(semester, trimmed, true, subjectsBySemester);
-      if (onSubjectsUpdated) onSubjectsUpdated(updatedMap);
-      setSubject(trimmed);
-      setCustomSubjectInput('');
-      setIsAddingCustomSubject(false);
-      if (notify) notify(`Added "${trimmed}" to Semester ${semester}.`, 'success');
-    } catch (err) {
-      const updatedMap = addCustomSubjectToSemester(semester, trimmed);
-      if (onSubjectsUpdated) onSubjectsUpdated(updatedMap);
-      setSubject(trimmed);
-      setCustomSubjectInput('');
-      setIsAddingCustomSubject(false);
-      if (notify) notify(`Added "${trimmed}" to Semester ${semester}.`, 'success');
-    }
-  };
 
   const handleRemoveQueuedFile = (id) => {
     setQueuedFiles((prev) => prev.filter((item) => item.id !== id));
@@ -258,10 +231,7 @@ export default function UploadBox({
             <select
               id="upload-semester"
               value={semester}
-              onChange={(e) => {
-                setSemester(Number(e.target.value));
-                setIsAddingCustomSubject(false);
-              }}
+              onChange={(e) => setSemester(Number(e.target.value))}
               className="w-full px-3.5 py-2.5 text-sm bg-white dark:bg-slate-800 text-slate-900 dark:text-white border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-none focus:border-[#2563EB] transition-colors"
             >
               {SEMESTER_LIST.map((sem) => (
@@ -272,74 +242,30 @@ export default function UploadBox({
             </select>
           </div>
 
-          {/* Dynamic Subject Selector + Custom Subject Option */}
+          {/* Dynamic Subject Selector (Academic curriculum subjects only) */}
           <div>
-            <div className="flex items-center justify-between mb-2">
-              <label
-                htmlFor="upload-subject"
-                className="block text-xs font-semibold text-slate-700 dark:text-slate-300"
-              >
-                Subject (Sem {semester}) *
-              </label>
-              <button
-                type="button"
-                onClick={() => setIsAddingCustomSubject((prev) => !prev)}
-                className="inline-flex items-center gap-1 text-xs font-medium text-[#2563EB] dark:text-blue-400 hover:underline"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                <span>{isAddingCustomSubject ? 'Select existing' : '+ Add subject'}</span>
-              </button>
-            </div>
-
-            {isAddingCustomSubject ? (
-              <div className="flex items-center gap-2">
-                <input
-                  type="text"
-                  value={customSubjectInput}
-                  onChange={(e) => setCustomSubjectInput(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      e.preventDefault();
-                      handleAddCustomSubject();
-                    }
-                  }}
-                  placeholder="e.g. Operating Systems"
-                  aria-label="New subject name"
-                  className="flex-1 min-w-0 px-3.5 py-2 text-sm bg-white dark:bg-slate-800 text-slate-900 dark:text-white border border-[#2563EB] rounded-xl focus:outline-none"
-                />
-                <button
-                  type="button"
-                  onClick={handleAddCustomSubject}
-                  className="px-3.5 py-2 text-xs font-semibold text-white bg-[#2563EB] hover:bg-[#1E3A8A] rounded-xl transition-colors whitespace-nowrap shrink-0"
-                >
-                  Save
-                </button>
-              </div>
-            ) : (
-              <select
-                id="upload-subject"
-                value={subject}
-                onChange={(e) => {
-                  if (e.target.value === '__ADD_CUSTOM__') {
-                    setIsAddingCustomSubject(true);
-                  } else {
-                    setSubject(e.target.value);
-                  }
-                }}
-                className="w-full px-3.5 py-2.5 text-sm bg-white dark:bg-slate-800 text-slate-900 dark:text-white border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-none focus:border-[#2563EB] transition-colors"
-              >
-                {currentSemesterSubjects.length === 0 ? (
-                  <option value="">No subjects yet for Sem {semester} (Click + Add)</option>
-                ) : (
-                  currentSemesterSubjects.map((subj) => (
-                    <option key={subj} value={subj}>
-                      {subj}
-                    </option>
-                  ))
-                )}
-                <option value="__ADD_CUSTOM__">+ Add new subject for Sem {semester}...</option>
-              </select>
-            )}
+            <label
+              htmlFor="upload-subject"
+              className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-2"
+            >
+              Subject (Sem {semester}) *
+            </label>
+            <select
+              id="upload-subject"
+              value={subject}
+              onChange={(e) => setSubject(e.target.value)}
+              className="w-full px-3.5 py-2.5 text-sm bg-white dark:bg-slate-800 text-slate-900 dark:text-white border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-none focus:border-[#2563EB] transition-colors"
+            >
+              {currentSemesterSubjects.length === 0 ? (
+                <option value="">No subjects configured for Sem {semester}</option>
+              ) : (
+                currentSemesterSubjects.map((subj) => (
+                  <option key={subj} value={subj}>
+                    {subj}
+                  </option>
+                ))
+              )}
+            </select>
           </div>
 
           {/* Category Dropdown */}

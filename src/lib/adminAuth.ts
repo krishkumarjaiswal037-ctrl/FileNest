@@ -1,18 +1,18 @@
 /**
- * Admin Authentication & Multi-Account Management Service
+ * Strict Single-Admin Authentication Service
  * (src/lib/adminAuth.ts)
  *
- * Capabilities:
- * 1. Multi-Admin Account Support: Allows administrators to register, switch, and log in
- *    with any authorized admin email and password.
- * 2. Secure PBKDF2 password hashing with cryptographically random salt (via Web Crypto API).
- * 3. Cross-device persistence: Synchronizes registered admin accounts with the server
- *    so admins can log in from any device or browser.
- * 4. Account switching and credential reset helpers.
+ * Rules:
+ * 1. Only ONE person can be admin.
+ * 2. Multi-admin registration is strictly disabled and prohibited.
+ * 3. Once the single administrator account is created, public registration is locked.
+ * 4. Passwords are securely hashed with PBKDF2 (100,000 iterations) and cryptographically random salts.
+ * 5. Changes to administrator email or password must be done from within the authenticated dashboard.
  */
 
-const ADMIN_ACCOUNTS_STORAGE_KEY = 'filenest_admin_accounts_v2';
+const SINGLE_ADMIN_STORAGE_KEY = 'filenest_single_admin_v3';
 const ADMIN_LEGACY_KEY = 'filenest_admin_account_v1';
+const ADMIN_ACCOUNTS_STORAGE_KEY = 'filenest_admin_accounts_v2';
 const ADMIN_SESSION_KEY = 'filenest_admin_session_v1';
 
 export interface AdminAccount {
@@ -35,7 +35,7 @@ export interface AdminSession {
 }
 
 /**
- * Generate cryptographic SHA-256 PBKDF2 hash
+ * Generate cryptographic SHA-256 PBKDF2 hash using Web Crypto API
  */
 async function hashPassword(password: string, salt: Uint8Array): Promise<string> {
   const enc = new TextEncoder();
@@ -76,56 +76,83 @@ function hexToBuffer(hex: string): Uint8Array {
   return bytes;
 }
 
+// Fixed Master Administrator Credentials (krish kumar jaiswal)
+export const FIXED_PRIMARY_ADMIN: AdminAccount = {
+  username: 'krish',
+  email: 'krishkumarjaiswal2081@gmail.com',
+  fullName: 'krish kumar jaiswal',
+  saltHex: '9e6b2afef5112d459005cc629cf4bff8',
+  hashHex: '69f5cf56c453bd044ec30dc42cbd72f058f83296fb7f26a57b3570df52c3bd5d',
+  createdAt: '2026-10-17T19:08:42.147Z',
+  lastLoginAt: '2026-10-17T19:08:42.148Z'
+};
+
 /**
- * Read all stored admin accounts (with backward compatibility migration)
+ * Read the single stored admin account from local storage
  */
-export function getStoredAdminAccounts(): AdminAccount[] {
+export function getStoredAdminAccount(): AdminAccount {
   try {
-    const raw = localStorage.getItem(ADMIN_ACCOUNTS_STORAGE_KEY);
+    const raw = localStorage.getItem(SINGLE_ADMIN_STORAGE_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed)) return parsed;
-    }
-
-    // Check legacy single-slot account
-    const legacyRaw = localStorage.getItem(ADMIN_LEGACY_KEY);
-    if (legacyRaw) {
-      const legacyAccount: AdminAccount = JSON.parse(legacyRaw);
-      if (legacyAccount && legacyAccount.username && legacyAccount.hashHex) {
-        const migrated = [legacyAccount];
-        localStorage.setItem(ADMIN_ACCOUNTS_STORAGE_KEY, JSON.stringify(migrated));
-        return migrated;
-      }
+      if (parsed && parsed.hashHex && parsed.username === 'krish') return parsed;
     }
   } catch (err) {
-    console.warn('Error reading admin accounts:', err);
+    console.warn('Error reading admin account:', err);
   }
-  return [];
+  saveStoredAdminAccount(FIXED_PRIMARY_ADMIN);
+  return FIXED_PRIMARY_ADMIN;
 }
 
-function saveStoredAdminAccounts(accounts: AdminAccount[]): void {
+/**
+ * Backwards compatibility helper
+ */
+export function getStoredAdminAccounts(): AdminAccount[] {
+  return [getStoredAdminAccount()];
+}
+
+/**
+ * Save single admin account to local storage
+ */
+export function saveStoredAdminAccount(account: AdminAccount | null): void {
   try {
-    localStorage.setItem(ADMIN_ACCOUNTS_STORAGE_KEY, JSON.stringify(accounts));
-    if (accounts.length > 0) {
-      // Keep legacy key updated with the primary account for backwards compatibility
-      localStorage.setItem(ADMIN_LEGACY_KEY, JSON.stringify(accounts[0]));
-    } else {
-      localStorage.removeItem(ADMIN_LEGACY_KEY);
-    }
+    const toSave = account || FIXED_PRIMARY_ADMIN;
+    localStorage.setItem(SINGLE_ADMIN_STORAGE_KEY, JSON.stringify(toSave));
+    localStorage.setItem(ADMIN_LEGACY_KEY, JSON.stringify(toSave));
+    localStorage.setItem(ADMIN_ACCOUNTS_STORAGE_KEY, JSON.stringify([toSave]));
   } catch (err) {
-    console.warn('Error saving admin accounts to storage:', err);
+    console.warn('Error saving admin account to storage:', err);
   }
 }
 
 /**
- * Checks if at least one admin account is registered
+ * Check if the single admin is registered (always true: fixed to krish)
  */
 export function isAdminRegistered(): boolean {
-  return getStoredAdminAccounts().length > 0;
+  return true;
 }
 
 /**
- * Gets the primary registered admin public metadata
+ * Query server status to know definitively if single admin is registered
+ */
+export async function checkAdminStatus(): Promise<{ isRegistered: boolean; adminUsername?: string }> {
+  try {
+    const res = await fetch('/api/admin/status');
+    if (res.ok) {
+      const data = await res.json();
+      return {
+        isRegistered: true,
+        adminUsername: data?.adminUsername || 'krish'
+      };
+    }
+  } catch {
+    // Fallback
+  }
+  return { isRegistered: true, adminUsername: 'krish' };
+}
+
+/**
+ * Gets the primary registered admin public info
  */
 export function getRegisteredAdminInfo(): {
   username: string;
@@ -134,40 +161,28 @@ export function getRegisteredAdminInfo(): {
   createdAt: string;
   lastLoginAt?: string;
 } | null {
-  const list = getStoredAdminAccounts();
-  if (list.length === 0) return null;
-  const primary = list[0];
+  const acc = getStoredAdminAccount();
+  if (!acc) return null;
   return {
-    username: primary.username,
-    email: primary.email,
-    fullName: primary.fullName,
-    createdAt: primary.createdAt,
-    lastLoginAt: primary.lastLoginAt
+    username: acc.username,
+    email: acc.email,
+    fullName: acc.fullName,
+    createdAt: acc.createdAt,
+    lastLoginAt: acc.lastLoginAt
   };
 }
 
 /**
- * Gets all registered admin public accounts (excluding hash & salt)
+ * Backwards compatibility helper
  */
-export function getRegisteredAdminAccounts(): Array<{
-  username: string;
-  email: string;
-  fullName: string;
-  createdAt: string;
-  lastLoginAt?: string;
-}> {
-  return getStoredAdminAccounts().map((a) => ({
-    username: a.username,
-    email: a.email,
-    fullName: a.fullName,
-    createdAt: a.createdAt,
-    lastLoginAt: a.lastLoginAt
-  }));
+export function getRegisteredAdminAccounts() {
+  const info = getRegisteredAdminInfo();
+  return info ? [info] : [];
 }
 
 /**
- * Register a new Admin account or update credentials for an existing email/username.
- * Saves locally and syncs to shared cloud server so admin can log in from any device.
+ * Register the SINGLE Primary Administrator Account.
+ * If an admin account already exists, registration is LOCKED and this throws an error.
  */
 export async function registerAdminAccount({
   username,
@@ -184,14 +199,21 @@ export async function registerAdminAccount({
   const cleanEmail = email.trim().toLowerCase();
   const cleanName = fullName.trim() || cleanUser;
 
+  // Check if an admin already exists locally
+  if (getStoredAdminAccount()) {
+    throw new Error(
+      'Registration is locked. Only one person can be administrator on FileNest, and an admin account is already active.'
+    );
+  }
+
   if (cleanUser.length < 3) {
-    throw new Error('Username must be at least 3 characters long.');
+    throw new Error('Admin username must be at least 3 characters long.');
   }
   if (!cleanEmail.includes('@') || !cleanEmail.includes('.')) {
-    throw new Error('Please enter a valid email address.');
+    throw new Error('Please enter a valid administrator email address.');
   }
   if (password.length < 6) {
-    throw new Error('Password must be at least 6 characters long.');
+    throw new Error('Admin password must be at least 6 characters long.');
   }
 
   // Generate random 16-byte salt
@@ -210,26 +232,31 @@ export async function registerAdminAccount({
     lastLoginAt: new Date().toISOString()
   };
 
-  const existing = getStoredAdminAccounts();
-  // Filter out any prior entry matching this username or email
-  const filtered = existing.filter(
-    (a) => a.username.toLowerCase() !== cleanUser && a.email.toLowerCase() !== cleanEmail
-  );
-  const updatedAccounts = [newAccount, ...filtered];
-  saveStoredAdminAccounts(updatedAccounts);
-
-  // Sync to shared server backend
+  // Sync to shared server backend first to ensure single-admin constraint
   try {
-    fetch('/api/admin/register', {
+    const res = await fetch('/api/admin/register', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ account: newAccount })
-    }).catch(() => {});
-  } catch {
-    // non-blocking
+    });
+
+    if (!res.ok) {
+      const errData = await res.json().catch(() => null);
+      if (errData?.error) {
+        throw new Error(errData.error);
+      }
+      throw new Error('Server rejected admin registration.');
+    }
+  } catch (netErr: any) {
+    if (netErr?.message && !netErr.message.includes('fetch')) {
+      throw netErr;
+    }
   }
 
-  // Create and persist active admin session
+  // Save single admin locally
+  saveStoredAdminAccount(newAccount);
+
+  // Create active admin session
   const session: AdminSession = {
     username: newAccount.username,
     email: newAccount.email,
@@ -246,7 +273,7 @@ export async function registerAdminAccount({
 }
 
 /**
- * Log in to any registered admin account via email or username
+ * Log in to the single administrator account via email or username
  */
 export async function loginAdmin({
   identifier,
@@ -256,41 +283,60 @@ export async function loginAdmin({
   password: string;
 }): Promise<AdminSession> {
   const cleanId = identifier.trim().toLowerCase();
-  let accounts = getStoredAdminAccounts();
+  const targetAccount = getStoredAdminAccount();
 
-  // 1. Try finding account and verifying password locally first
-  let matchAccount = accounts.find(
-    (a) => a.username.toLowerCase() === cleanId || a.email.toLowerCase() === cleanId
-  );
+  // Strict check: only krish or krishkumarjaiswal2081@gmail.com can enter
+  const matchesId =
+    cleanId === targetAccount.username.toLowerCase() ||
+    cleanId === targetAccount.email.toLowerCase() ||
+    cleanId === 'krish' ||
+    cleanId === 'krishkumarjaiswal2081@gmail.com';
 
-  if (matchAccount) {
-    try {
-      const salt = hexToBuffer(matchAccount.saltHex);
-      const computedHash = await hashPassword(password, salt);
-      if (computedHash === matchAccount.hashHex) {
-        matchAccount.lastLoginAt = new Date().toISOString();
-        saveStoredAdminAccounts(accounts);
+  if (!matchesId) {
+    throw new Error(
+      'Access Denied: Only the authorized single administrator (krish / krishkumarjaiswal2081@gmail.com) can enter. Multi-entry or foreign accounts are strictly blocked.'
+    );
+  }
 
-        const session: AdminSession = {
-          username: matchAccount.username,
-          email: matchAccount.email,
-          fullName: matchAccount.fullName,
-          loginTime: new Date().toISOString(),
-          token: `fn_adm_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`
-        };
+  // 1. Verify hash locally via Web Crypto PBKDF2
+  try {
+    const salt = hexToBuffer(targetAccount.saltHex);
+    const computedHash = await hashPassword(password, salt);
+    if (computedHash === targetAccount.hashHex) {
+      targetAccount.lastLoginAt = new Date().toISOString();
+      saveStoredAdminAccount(targetAccount);
 
-        localStorage.setItem(ADMIN_SESSION_KEY, JSON.stringify(session));
-        if (typeof window !== 'undefined') {
-          window.dispatchEvent(new CustomEvent('filenest_admin_session_change', { detail: session }));
-        }
-        return session;
+      const session: AdminSession = {
+        username: targetAccount.username,
+        email: targetAccount.email,
+        fullName: targetAccount.fullName,
+        loginTime: new Date().toISOString(),
+        token: `fn_adm_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`
+      };
+
+      localStorage.setItem(ADMIN_SESSION_KEY, JSON.stringify(session));
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('filenest_admin_session_change', { detail: session }));
       }
-    } catch {
-      // local hash comparison error, proceed to server check
+
+      // Non-blocking ping to server
+      fetch('/api/admin/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ identifier: cleanId, password })
+      }).catch(() => {});
+
+      return session;
+    } else {
+      throw new Error('Incorrect password. Access denied.');
+    }
+  } catch (err: any) {
+    if (err?.message === 'Incorrect password. Access denied.') {
+      throw err;
     }
   }
 
-  // 2. Try server-side verification via /api/admin/login (essential for other devices/emails)
+  // 2. Server verification via /api/admin/login
   try {
     const res = await fetch('/api/admin/login', {
       method: 'POST',
@@ -304,15 +350,8 @@ export async function loginAdmin({
         const session: AdminSession = data.session;
         localStorage.setItem(ADMIN_SESSION_KEY, JSON.stringify(session));
 
-        // If server provided full account details, cache locally for offline access
         if (data.account && data.account.hashHex) {
-          const current = getStoredAdminAccounts();
-          const filtered = current.filter(
-            (a) =>
-              a.username.toLowerCase() !== data.account.username.toLowerCase() &&
-              a.email.toLowerCase() !== data.account.email.toLowerCase()
-          );
-          saveStoredAdminAccounts([data.account, ...filtered]);
+          saveStoredAdminAccount(data.account);
         }
 
         if (typeof window !== 'undefined') {
@@ -332,34 +371,88 @@ export async function loginAdmin({
     }
   }
 
-  if (matchAccount) {
-    throw new Error('Incorrect password. Please verify your credentials and try again.');
-  }
-
-  throw new Error(
-    `No administrator account found for "${identifier}". You can register this email in the "Register Another Admin" tab.`
-  );
+  throw new Error('Incorrect administrator credentials. Access is restricted exclusively to krish.');
 }
 
 /**
- * Reset all registered admin accounts (allows completely fresh registration)
+ * Update Single Admin Credentials (must be executed by authenticated admin)
  */
-export async function resetAllAdminAccounts(): Promise<void> {
-  try {
-    localStorage.removeItem(ADMIN_ACCOUNTS_STORAGE_KEY);
-    localStorage.removeItem(ADMIN_LEGACY_KEY);
-    localStorage.removeItem(ADMIN_SESSION_KEY);
-    if (typeof window !== 'undefined') {
-      window.dispatchEvent(new CustomEvent('filenest_admin_session_change', { detail: null }));
-    }
-    try {
-      fetch('/api/admin/reset', { method: 'POST' }).catch(() => {});
-    } catch {
-      // ignore
-    }
-  } catch (err) {
-    console.warn('Error resetting admin accounts:', err);
+export async function updateAdminCredentials({
+  currentPassword,
+  newUsername,
+  newEmail,
+  newFullName,
+  newPassword
+}: {
+  currentPassword?: string;
+  newUsername?: string;
+  newEmail?: string;
+  newFullName?: string;
+  newPassword?: string;
+}): Promise<AdminSession> {
+  const session = getAdminSession();
+  if (!session) {
+    throw new Error('You must be authenticated as administrator.');
   }
+
+  if (!currentPassword) {
+    throw new Error('Current password is required to update credentials.');
+  }
+
+  const localAccount = getStoredAdminAccount();
+  if (localAccount) {
+    const salt = hexToBuffer(localAccount.saltHex);
+    const computedHash = await hashPassword(currentPassword, salt);
+    if (computedHash !== localAccount.hashHex) {
+      throw new Error('Current administrator password is incorrect.');
+    }
+  }
+
+  // Send update request to server
+  const res = await fetch('/api/admin/update-credentials', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      currentPassword,
+      newUsername,
+      newEmail,
+      newFullName,
+      newPassword
+    })
+  });
+
+  if (!res.ok) {
+    const errData = await res.json().catch(() => null);
+    throw new Error(errData?.error || 'Failed to update admin credentials on server.');
+  }
+
+  const data = await res.json();
+  const updatedSession: AdminSession = data.session || {
+    ...session,
+    username: newUsername || session.username,
+    email: newEmail || session.email,
+    fullName: newFullName || session.fullName
+  };
+
+  if (localAccount) {
+    if (newUsername) localAccount.username = newUsername.trim().toLowerCase();
+    if (newEmail) localAccount.email = newEmail.trim().toLowerCase();
+    if (newFullName) localAccount.fullName = newFullName.trim();
+    if (newPassword && newPassword.length >= 6) {
+      const newSalt = new Uint8Array(16);
+      crypto.getRandomValues(newSalt);
+      localAccount.saltHex = bufferToHex(newSalt);
+      localAccount.hashHex = await hashPassword(newPassword, newSalt);
+    }
+    saveStoredAdminAccount(localAccount);
+  }
+
+  localStorage.setItem(ADMIN_SESSION_KEY, JSON.stringify(updatedSession));
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('filenest_admin_session_change', { detail: updatedSession }));
+  }
+
+  return updatedSession;
 }
 
 /**
@@ -392,63 +485,25 @@ export function logoutAdmin(): void {
 }
 
 /**
- * Update Admin Profile details or password (must be authenticated)
+ * Reset admin account (requires current admin password)
  */
-export async function updateAdminCredentials({
-  fullName,
-  email,
-  currentPassword,
-  newPassword
-}: {
-  fullName?: string;
-  email?: string;
-  currentPassword?: string;
-  newPassword?: string;
-}): Promise<void> {
-  const session = getAdminSession();
-  if (!session) throw new Error('You must be signed in as an administrator.');
-
-  const accounts = getStoredAdminAccounts();
-  const account = accounts.find(
-    (a) => a.username.toLowerCase() === session.username.toLowerCase() || a.email.toLowerCase() === session.email.toLowerCase()
-  );
-
-  if (!account) throw new Error('Administrator account record not found.');
-
-  if (currentPassword && newPassword) {
-    const salt = hexToBuffer(account.saltHex);
-    const computedHash = await hashPassword(currentPassword, salt);
-    if (computedHash !== account.hashHex) {
-      throw new Error('Current password is incorrect.');
-    }
-    if (newPassword.length < 6) {
-      throw new Error('New password must be at least 6 characters.');
-    }
-    const newSalt = new Uint8Array(16);
-    crypto.getRandomValues(newSalt);
-    account.saltHex = bufferToHex(newSalt);
-    account.hashHex = await hashPassword(newPassword, newSalt);
-  }
-
-  if (fullName && fullName.trim()) {
-    account.fullName = fullName.trim();
-    session.fullName = account.fullName;
-  }
-  if (email && email.trim() && email.includes('@')) {
-    account.email = email.trim().toLowerCase();
-    session.email = account.email;
-  }
-
-  saveStoredAdminAccounts(accounts);
-  localStorage.setItem(ADMIN_SESSION_KEY, JSON.stringify(session));
-
+export async function resetAllAdminAccounts(currentPassword?: string): Promise<void> {
   try {
-    fetch('/api/admin/register', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ account })
-    }).catch(() => {});
-  } catch {
-    // non-blocking
+    if (currentPassword) {
+      const res = await fetch('/api/admin/reset', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ currentPassword })
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => null);
+        throw new Error(err?.error || 'Could not reset credentials on server.');
+      }
+    }
+    saveStoredAdminAccount(null);
+    logoutAdmin();
+  } catch (err: any) {
+    console.warn('Error resetting admin account:', err);
+    throw err;
   }
 }

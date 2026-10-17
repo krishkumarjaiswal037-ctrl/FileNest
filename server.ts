@@ -283,46 +283,87 @@ app.post('/api/curriculum-subjects', (req, res) => {
 });
 
 // ============================================================================
-// SHARED PERSISTENT ADMIN ACCOUNTS REGISTRY (MULTI-ADMIN & CROSS-DEVICE)
+// SINGLE PRIMARY ADMIN REGISTRY & RESTRICTED ACCESS
 // ============================================================================
 const ADMIN_ACCOUNTS_FILE = path.resolve(__dirname, 'data', 'admin_accounts.json');
+const PRIMARY_ADMIN_FILE = path.resolve(__dirname, 'data', 'primary_admin.json');
 
-function readServerAdminAccounts(): any[] {
+// Fixed Single Master Administrator (krish kumar jaiswal)
+const FIXED_PRIMARY_ADMIN = {
+  username: 'krish',
+  email: 'krishkumarjaiswal2081@gmail.com',
+  fullName: 'krish kumar jaiswal',
+  saltHex: '9e6b2afef5112d459005cc629cf4bff8',
+  hashHex: '69f5cf56c453bd044ec30dc42cbd72f058f83296fb7f26a57b3570df52c3bd5d',
+  createdAt: '2026-10-17T19:08:42.147Z',
+  lastLoginAt: '2026-10-17T19:08:42.148Z'
+};
+
+function readServerPrimaryAdmin(): any {
   try {
-    if (fs.existsSync(ADMIN_ACCOUNTS_FILE)) {
-      const raw = fs.readFileSync(ADMIN_ACCOUNTS_FILE, 'utf-8');
+    if (fs.existsSync(PRIMARY_ADMIN_FILE)) {
+      const raw = fs.readFileSync(PRIMARY_ADMIN_FILE, 'utf-8');
       const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed)) return parsed;
+      if (parsed && parsed.hashHex && parsed.username === 'krish') return parsed;
     }
   } catch (err) {
-    console.warn('Error reading admin accounts file:', err);
+    console.warn('Error reading primary admin file:', err);
   }
-  return [];
+  // Initialize and write the fixed single administrator
+  writeServerPrimaryAdmin(FIXED_PRIMARY_ADMIN);
+  return FIXED_PRIMARY_ADMIN;
 }
 
-function writeServerAdminAccounts(accounts: any[]) {
-  fs.writeFileSync(ADMIN_ACCOUNTS_FILE, JSON.stringify(accounts, null, 2), 'utf-8');
+function writeServerPrimaryAdmin(admin: any | null) {
+  try {
+    const toSave = admin || FIXED_PRIMARY_ADMIN;
+    fs.writeFileSync(PRIMARY_ADMIN_FILE, JSON.stringify(toSave, null, 2), 'utf-8');
+    fs.writeFileSync(ADMIN_ACCOUNTS_FILE, JSON.stringify([toSave], null, 2), 'utf-8');
+  } catch (err) {
+    console.error('Error writing primary admin:', err);
+  }
 }
 
 /**
+ * GET /api/admin/status
+ * Returns single admin registration status (does NOT leak credentials or emails)
+ */
+app.get('/api/admin/status', (_req, res) => {
+  const admin = readServerPrimaryAdmin();
+  const isRegistered = Boolean(admin && admin.hashHex);
+  return res.json({
+    isRegistered,
+    adminUsername: isRegistered ? admin.username : undefined
+  });
+});
+
+/**
  * GET /api/admin/accounts
- * Returns public metadata of all registered admin accounts (excludes secret hashes)
+ * Returns metadata for the single admin account
  */
 app.get('/api/admin/accounts', (_req, res) => {
-  const accounts = readServerAdminAccounts();
-  const publicList = accounts.map((a) => ({
-    username: a.username,
-    email: a.email,
-    fullName: a.fullName,
-    createdAt: a.createdAt,
-    lastLoginAt: a.lastLoginAt
-  }));
-  return res.json({ accounts: publicList, total: publicList.length });
+  const admin = readServerPrimaryAdmin();
+  if (!admin || !admin.hashHex) {
+    return res.json({ accounts: [], total: 0, isRegistered: false });
+  }
+  return res.json({
+    accounts: [
+      {
+        username: admin.username,
+        email: admin.email,
+        fullName: admin.fullName,
+        createdAt: admin.createdAt,
+        lastLoginAt: admin.lastLoginAt
+      }
+    ],
+    total: 1,
+    isRegistered: true
+  });
 });
 
 /**
  * POST /api/admin/login
- * Validates credentials against registered administrator accounts on server
+ * Validates credentials strictly against the single administrator account
  */
 app.post('/api/admin/login', (req, res) => {
   const { identifier, password } = req.body;
@@ -331,44 +372,44 @@ app.post('/api/admin/login', (req, res) => {
   }
 
   const cleanId = String(identifier).trim().toLowerCase();
-  const accounts = readServerAdminAccounts();
+  const admin = readServerPrimaryAdmin();
 
-  const match = accounts.find(
-    (a) => a.username?.toLowerCase() === cleanId || a.email?.toLowerCase() === cleanId
-  );
+  if (!admin || !admin.hashHex) {
+    return res.status(400).json({
+      error: 'No administrator account configured yet. Please complete initial setup.'
+    });
+  }
 
-  if (!match) {
-    if (accounts.length === 0) {
-      return res.status(401).json({
-        error: 'No administrator accounts registered yet on server. Please use "Register Another Admin" to register your email and password.'
-      });
-    }
+  const matchesIdentifier =
+    admin.username?.toLowerCase() === cleanId || admin.email?.toLowerCase() === cleanId;
+
+  if (!matchesIdentifier) {
     return res.status(401).json({
-      error: `No administrator account found for "${identifier}". You can register this email in the "Register Another Admin" tab.`
+      error: 'Invalid administrator credentials. Access is restricted exclusively to the single authorized admin.'
     });
   }
 
   try {
     const computedHash = crypto
-      .pbkdf2Sync(String(password), Buffer.from(match.saltHex, 'hex'), 100000, 32, 'sha256')
+      .pbkdf2Sync(String(password), Buffer.from(admin.saltHex, 'hex'), 100000, 32, 'sha256')
       .toString('hex');
 
-    if (computedHash !== match.hashHex) {
-      return res.status(401).json({ error: 'Incorrect password. Please verify your credentials and try again.' });
+    if (computedHash !== admin.hashHex) {
+      return res.status(401).json({ error: 'Incorrect password. Access denied.' });
     }
 
-    match.lastLoginAt = new Date().toISOString();
-    writeServerAdminAccounts(accounts);
+    admin.lastLoginAt = new Date().toISOString();
+    writeServerPrimaryAdmin(admin);
 
     const session = {
-      username: match.username,
-      email: match.email,
-      fullName: match.fullName,
+      username: admin.username,
+      email: admin.email,
+      fullName: admin.fullName,
       loginTime: new Date().toISOString(),
       token: `fn_adm_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`
     };
 
-    return res.json({ success: true, session, account: match });
+    return res.json({ success: true, session, account: admin });
   } catch (err: any) {
     console.error('Login hash verification error:', err);
     return res.status(500).json({ error: 'Internal error verifying credentials.' });
@@ -377,27 +418,25 @@ app.post('/api/admin/login', (req, res) => {
 
 /**
  * POST /api/admin/register
- * Persists an admin account record to server so admin can log in from any device or email
+ * Only allows initial registration if NO admin exists yet.
+ * If an admin is already registered, STRICTLY LOCKS & REJECTS any further registration!
  */
 app.post('/api/admin/register', (req, res) => {
+  const existing = readServerPrimaryAdmin();
+  if (existing && existing.hashHex) {
+    return res.status(403).json({
+      error: 'Registration is locked. Only one person can be administrator, and the master admin account is already active. No additional admin accounts are permitted.'
+    });
+  }
+
   const { account } = req.body;
   if (!account || !account.username || !account.email || !account.hashHex || !account.saltHex) {
     return res.status(400).json({ error: 'Valid admin account credentials are required.' });
   }
 
   try {
-    const existing = readServerAdminAccounts();
-    const cleanUser = String(account.username).trim().toLowerCase();
-    const cleanEmail = String(account.email).trim().toLowerCase();
-
-    // Replace if exists, or append new admin
-    const filtered = existing.filter(
-      (a) => a.username?.toLowerCase() !== cleanUser && a.email?.toLowerCase() !== cleanEmail
-    );
-    const updated = [...filtered, account];
-    writeServerAdminAccounts(updated);
-
-    return res.json({ success: true, count: updated.length });
+    writeServerPrimaryAdmin(account);
+    return res.json({ success: true, isRegistered: true });
   } catch (err: any) {
     console.error('Error saving admin account on server:', err);
     return res.status(500).json({ error: err?.message || 'Failed to save admin account.' });
@@ -405,15 +444,93 @@ app.post('/api/admin/register', (req, res) => {
 });
 
 /**
- * POST /api/admin/reset
- * Wipes registered admin accounts allowing fresh re-registration
+ * POST /api/admin/update-credentials
+ * Allows the authenticated single admin to update their email, username, or password
  */
-app.post('/api/admin/reset', (_req, res) => {
+app.post('/api/admin/update-credentials', (req, res) => {
+  const { currentPassword, newUsername, newEmail, newFullName, newPassword } = req.body;
+  const admin = readServerPrimaryAdmin();
+
+  if (!admin || !admin.hashHex) {
+    return res.status(400).json({ error: 'No administrator account configured.' });
+  }
+
+  if (!currentPassword) {
+    return res.status(400).json({ error: 'Current administrator password is required.' });
+  }
+
   try {
-    writeServerAdminAccounts([]);
-    return res.json({ success: true, message: 'All admin accounts reset successfully.' });
+    const computedHash = crypto
+      .pbkdf2Sync(String(currentPassword), Buffer.from(admin.saltHex, 'hex'), 100000, 32, 'sha256')
+      .toString('hex');
+
+    if (computedHash !== admin.hashHex) {
+      return res.status(401).json({ error: 'Incorrect current password. Credential update aborted.' });
+    }
+
+    if (newUsername && String(newUsername).trim().length >= 3) {
+      admin.username = String(newUsername).trim().toLowerCase();
+    }
+    if (newEmail && String(newEmail).trim().includes('@')) {
+      admin.email = String(newEmail).trim().toLowerCase();
+    }
+    if (newFullName && String(newFullName).trim().length > 0) {
+      admin.fullName = String(newFullName).trim();
+    }
+    if (newPassword && String(newPassword).length >= 6) {
+      const newSalt = crypto.randomBytes(16);
+      admin.saltHex = newSalt.toString('hex');
+      admin.hashHex = crypto
+        .pbkdf2Sync(String(newPassword), newSalt, 100000, 32, 'sha256')
+        .toString('hex');
+    }
+
+    writeServerPrimaryAdmin(admin);
+
+    const session = {
+      username: admin.username,
+      email: admin.email,
+      fullName: admin.fullName,
+      loginTime: new Date().toISOString(),
+      token: `fn_adm_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`
+    };
+
+    return res.json({ success: true, session, message: 'Admin credentials updated successfully.' });
   } catch (err: any) {
-    return res.status(500).json({ error: err?.message || 'Failed to reset admin accounts.' });
+    console.error('Error updating credentials:', err);
+    return res.status(500).json({ error: err?.message || 'Failed to update credentials.' });
+  }
+});
+
+/**
+ * POST /api/admin/reset
+ * Secure reset: only allowed if current admin password is provided
+ */
+app.post('/api/admin/reset', (req, res) => {
+  const { currentPassword } = req.body;
+  const admin = readServerPrimaryAdmin();
+  if (!admin || !admin.hashHex) {
+    writeServerPrimaryAdmin(null);
+    return res.json({ success: true, message: 'Admin account cleared.' });
+  }
+
+  if (!currentPassword) {
+    return res.status(401).json({ error: 'Current password is required to reset administrator account.' });
+  }
+
+  try {
+    const computedHash = crypto
+      .pbkdf2Sync(String(currentPassword), Buffer.from(admin.saltHex, 'hex'), 100000, 32, 'sha256')
+      .toString('hex');
+
+    if (computedHash !== admin.hashHex) {
+      return res.status(401).json({ error: 'Incorrect administrator password.' });
+    }
+
+    writeServerPrimaryAdmin(null);
+    return res.json({ success: true, message: 'Administrator credentials have been reset.' });
+  } catch (err: any) {
+    return res.status(500).json({ error: err?.message || 'Failed to reset admin account.' });
   }
 });
 

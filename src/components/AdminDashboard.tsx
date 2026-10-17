@@ -21,9 +21,14 @@ import {
   GraduationCap,
   Pencil,
   Check,
-  X
+  X,
+  Lock,
+  KeyRound,
+  User,
+  Mail,
+  ShieldCheck
 } from 'lucide-react';
-import { AdminSession } from '../lib/adminAuth';
+import { AdminSession, updateAdminCredentials } from '../lib/adminAuth';
 import {
   formatFileSize,
   syncLocalFilesToSupabase,
@@ -60,14 +65,63 @@ export default function AdminDashboard({
   notify,
   onLogout
 }: AdminDashboardProps) {
-  // Navigation between Vault Files and Subject Management
-  const [activeAdminTab, setActiveAdminTab] = useState<'files' | 'curriculum'>('files');
+  // Navigation between Vault Files, Subject Management, and Admin Security
+  const [activeAdminTab, setActiveAdminTab] = useState<'files' | 'curriculum' | 'security'>('files');
   const [editingSemester, setEditingSemester] = useState<number>(1);
   const [newSubjectInput, setNewSubjectInput] = useState('');
   const [isAddingSubject, setIsAddingSubject] = useState(false);
   const [subjectSearch, setSubjectSearch] = useState('');
   const [editingSubject, setEditingSubject] = useState<{ sem: number; oldName: string; currentVal: string } | null>(null);
   const [isSavingSubjectEdit, setIsSavingSubjectEdit] = useState(false);
+
+  // Single Admin Security state
+  const [secCurrentPassword, setSecCurrentPassword] = useState('');
+  const [secNewEmail, setSecNewEmail] = useState(session.email || '');
+  const [secNewUsername, setSecNewUsername] = useState(session.username || '');
+  const [secNewFullName, setSecNewFullName] = useState(session.fullName || '');
+  const [secNewPassword, setSecNewPassword] = useState('');
+  const [secConfirmPassword, setSecConfirmPassword] = useState('');
+  const [isUpdatingSec, setIsUpdatingSec] = useState(false);
+  const [secMsg, setSecMsg] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
+
+  const handleUpdateAdminSecurity = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSecMsg(null);
+
+    if (!secCurrentPassword) {
+      setSecMsg({ text: 'Current administrator password is required to save changes.', type: 'error' });
+      return;
+    }
+    if (secNewPassword && secNewPassword !== secConfirmPassword) {
+      setSecMsg({ text: 'New passwords do not match.', type: 'error' });
+      return;
+    }
+    if (secNewPassword && secNewPassword.length < 6) {
+      setSecMsg({ text: 'New password must be at least 6 characters long.', type: 'error' });
+      return;
+    }
+
+    setIsUpdatingSec(true);
+    try {
+      await updateAdminCredentials({
+        currentPassword: secCurrentPassword,
+        newEmail: secNewEmail.trim() !== session.email ? secNewEmail.trim() : undefined,
+        newUsername: secNewUsername.trim() !== session.username ? secNewUsername.trim() : undefined,
+        newFullName: secNewFullName.trim() !== session.fullName ? secNewFullName.trim() : undefined,
+        newPassword: secNewPassword || undefined
+      });
+      setSecMsg({ text: 'Administrator credentials updated successfully!', type: 'success' });
+      notify('Administrator profile and credentials updated.', 'success');
+      setSecCurrentPassword('');
+      setSecNewPassword('');
+      setSecConfirmPassword('');
+    } catch (err: any) {
+      setSecMsg({ text: err?.message || 'Failed to update credentials.', type: 'error' });
+      notify(err?.message || 'Update failed', 'error');
+    } finally {
+      setIsUpdatingSec(false);
+    }
+  };
 
   // Filters & Search
   const [searchQuery, setSearchQuery] = useState('');
@@ -453,11 +507,11 @@ export default function AdminDashboard({
 
       {/* Admin Tab Switcher: Vault Files vs Semester Curriculum & Subjects */}
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 dark:border-slate-800 pb-2">
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <button
             type="button"
             onClick={() => setActiveAdminTab('files')}
-            className={`inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-semibold transition-all ${
+            className={`inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-semibold transition-all cursor-pointer ${
               activeAdminTab === 'files'
                 ? 'bg-[#2563EB] text-white shadow-xs'
                 : 'bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800'
@@ -470,7 +524,7 @@ export default function AdminDashboard({
           <button
             type="button"
             onClick={() => setActiveAdminTab('curriculum')}
-            className={`inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-semibold transition-all ${
+            className={`inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-semibold transition-all cursor-pointer ${
               activeAdminTab === 'curriculum'
                 ? 'bg-[#2563EB] text-white shadow-xs'
                 : 'bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800'
@@ -478,6 +532,19 @@ export default function AdminDashboard({
           >
             <BookOpen className="w-4 h-4" />
             <span>Curriculum &amp; Subjects (8 Semesters)</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveAdminTab('security')}
+            className={`inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-semibold transition-all cursor-pointer ${
+              activeAdminTab === 'security'
+                ? 'bg-[#2563EB] text-white shadow-xs'
+                : 'bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800'
+            }`}
+          >
+            <ShieldCheck className="w-4 h-4" />
+            <span>Admin Security &amp; Profile</span>
           </button>
         </div>
 
@@ -490,7 +557,7 @@ export default function AdminDashboard({
         </Link>
       </div>
 
-      {activeAdminTab === 'curriculum' ? (
+      {activeAdminTab === 'curriculum' && (
         /* Curriculum & Subjects Management View */
         <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-xs overflow-hidden">
           <div className="p-6 border-b border-slate-200 dark:border-slate-800">
@@ -706,8 +773,224 @@ export default function AdminDashboard({
             })()}
           </div>
         </div>
-      ) : (
-        /* Main Table / Files Management Container */
+      )}
+
+      {/* Admin Security & Account Profile View */}
+      {activeAdminTab === 'security' && (
+        <div className="space-y-6">
+          {/* Status & Single Admin Policy Banner */}
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 shadow-xs">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div className="flex items-start gap-4">
+                <div className="p-3 bg-blue-50 dark:bg-blue-950/60 rounded-2xl text-[#2563EB] dark:text-blue-400 shrink-0">
+                  <ShieldCheck className="w-8 h-8" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h2 className="text-lg font-bold text-slate-900 dark:text-white">
+                      Single-Administrator Security Policy
+                    </h2>
+                    <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-emerald-100 dark:bg-emerald-900/50 text-emerald-700 dark:text-emerald-300">
+                      Active &amp; Locked
+                    </span>
+                  </div>
+                  <p className="mt-1 text-xs text-slate-600 dark:text-slate-400 max-w-2xl leading-relaxed">
+                    This website is strictly locked to <strong>one administrator</strong>. Public registration is permanently closed and unauthorized access is prohibited. Multi-admin accounts are disabled.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Profile Overview */}
+            <div className="mt-6 grid grid-cols-1 sm:grid-cols-3 gap-4 pt-6 border-t border-slate-200/80 dark:border-slate-800">
+              <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700/60">
+                <div className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
+                  Admin Name
+                </div>
+                <div className="mt-1 text-sm font-bold text-slate-900 dark:text-white truncate">
+                  {session.fullName || session.username}
+                </div>
+              </div>
+              <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700/60">
+                <div className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
+                  Admin Email
+                </div>
+                <div className="mt-1 text-sm font-bold text-slate-900 dark:text-white truncate">
+                  {session.email}
+                </div>
+              </div>
+              <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700/60">
+                <div className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
+                  Username
+                </div>
+                <div className="mt-1 text-sm font-bold text-slate-900 dark:text-white truncate">
+                  {session.username}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Update Credentials Form */}
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-xs overflow-hidden">
+            <div className="p-6 border-b border-slate-200 dark:border-slate-800">
+              <div className="flex items-center gap-2">
+                <div className="p-1.5 rounded-lg bg-blue-50 dark:bg-blue-950/50 text-[#2563EB] dark:text-blue-400">
+                  <KeyRound className="w-5 h-5" />
+                </div>
+                <h3 className="text-base font-bold text-slate-900 dark:text-white">
+                  Update Administrator Credentials
+                </h3>
+              </div>
+              <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                Safely update your administrator email, username, or master password. Your current password is required.
+              </p>
+            </div>
+
+            <form onSubmit={handleUpdateAdminSecurity} className="p-6 space-y-4 max-w-xl">
+              {secMsg && (
+                <div
+                  className={`p-3.5 rounded-xl text-xs flex items-center gap-2.5 ${
+                    secMsg.type === 'success'
+                      ? 'bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-900/60 text-emerald-800 dark:text-emerald-300'
+                      : 'bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900/60 text-red-800 dark:text-red-300'
+                  }`}
+                >
+                  {secMsg.type === 'success' ? (
+                    <Check className="w-4 h-4 shrink-0 text-emerald-600" />
+                  ) : (
+                    <X className="w-4 h-4 shrink-0 text-red-600" />
+                  )}
+                  <span>{secMsg.text}</span>
+                </div>
+              )}
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5">
+                  Current Administrator Password (Required) *
+                </label>
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
+                    <KeyRound className="w-4 h-4" />
+                  </div>
+                  <input
+                    type="password"
+                    required
+                    value={secCurrentPassword}
+                    onChange={(e) => setSecCurrentPassword(e.target.value)}
+                    placeholder="Enter current password to authorize changes"
+                    className="w-full pl-10 pr-3.5 py-2.5 bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl text-sm text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-hidden focus:ring-2 focus:ring-[#2563EB]"
+                  />
+                </div>
+              </div>
+
+              <div className="pt-2 border-t border-slate-100 dark:border-slate-800 grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5">
+                    Admin Full Name
+                  </label>
+                  <div className="relative">
+                    <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
+                      <User className="w-4 h-4" />
+                    </div>
+                    <input
+                      type="text"
+                      value={secNewFullName}
+                      onChange={(e) => setSecNewFullName(e.target.value)}
+                      className="w-full pl-10 pr-3.5 py-2 bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl text-sm text-slate-900 dark:text-white"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5">
+                    Admin Username
+                  </label>
+                  <div className="relative">
+                    <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
+                      <User className="w-4 h-4" />
+                    </div>
+                    <input
+                      type="text"
+                      value={secNewUsername}
+                      onChange={(e) => setSecNewUsername(e.target.value)}
+                      className="w-full pl-10 pr-3.5 py-2 bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl text-sm text-slate-900 dark:text-white"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5">
+                  Admin Email
+                </label>
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
+                    <Mail className="w-4 h-4" />
+                  </div>
+                  <input
+                    type="email"
+                    value={secNewEmail}
+                    onChange={(e) => setSecNewEmail(e.target.value)}
+                    className="w-full pl-10 pr-3.5 py-2 bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl text-sm text-slate-900 dark:text-white"
+                  />
+                </div>
+              </div>
+
+              <div className="pt-2 border-t border-slate-100 dark:border-slate-800 grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5">
+                    New Password (Optional)
+                  </label>
+                  <div className="relative">
+                    <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
+                      <Lock className="w-4 h-4" />
+                    </div>
+                    <input
+                      type="password"
+                      value={secNewPassword}
+                      onChange={(e) => setSecNewPassword(e.target.value)}
+                      placeholder="Leave blank to keep current"
+                      className="w-full pl-10 pr-3.5 py-2 bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl text-sm text-slate-900 dark:text-white placeholder:text-slate-400"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5">
+                    Confirm New Password
+                  </label>
+                  <div className="relative">
+                    <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
+                      <Lock className="w-4 h-4" />
+                    </div>
+                    <input
+                      type="password"
+                      value={secConfirmPassword}
+                      onChange={(e) => setSecConfirmPassword(e.target.value)}
+                      placeholder="Re-type new password"
+                      className="w-full pl-10 pr-3.5 py-2 bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl text-sm text-slate-900 dark:text-white placeholder:text-slate-400"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="pt-4">
+                <button
+                  type="submit"
+                  disabled={isUpdatingSec}
+                  className="px-5 py-2.5 bg-[#2563EB] hover:bg-[#1D4ED8] text-white font-semibold text-xs rounded-xl shadow-xs transition-all disabled:opacity-50 cursor-pointer flex items-center gap-2"
+                >
+                  <ShieldCheck className="w-4 h-4" />
+                  <span>{isUpdatingSec ? 'Saving Changes...' : 'Save Updated Credentials'}</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Main Table / Files Management Container */}
+      {activeAdminTab === 'files' && (
         <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-xs overflow-hidden">
           {/* Table Controls / Filter Toolbar */}
           <div className="p-5 border-b border-slate-200 dark:border-slate-800 space-y-4">
