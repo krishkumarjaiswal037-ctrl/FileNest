@@ -103,10 +103,10 @@ export default function Tools({
     if (!trimmed) return;
 
     try {
-      const updated = await addSubjectToSupabase(editingSemester, trimmed, true);
+      const updated = await addSubjectToSupabase(editingSemester, trimmed, true, subjectsBySemester);
       onSubjectsUpdated(updated);
       setNewSubjectInput('');
-      if (notify) notify(`Added "${trimmed}" to Semester ${editingSemester}.`, 'success');
+      if (notify) notify(`Added "${trimmed}" to Semester ${editingSemester}. Saved to Supabase cloud!`, 'success');
     } catch (err) {
       if (notify) notify(err?.message || 'Could not add subject', 'error');
     }
@@ -119,7 +119,7 @@ export default function Tools({
     }
 
     try {
-      const updated = await deleteSubjectFromSupabase(editingSemester, subjToRemove, true);
+      const updated = await deleteSubjectFromSupabase(editingSemester, subjToRemove, true, subjectsBySemester);
       onSubjectsUpdated(updated);
       if (notify) notify(`Removed "${subjToRemove}" from Semester ${editingSemester}.`, 'info');
     } catch (err) {

@@ -12,7 +12,9 @@ export const DEFAULT_SUBJECTS_BY_SEMESTER = {
     "pps",
     "Programming in C"
   ],
-  2: [],
+  2: [
+    "math 2"
+  ],
   3: [
     "Data Structures & Algorithms"
   ],
@@ -145,13 +147,6 @@ export function saveAllSubjectsMap(subjectsMap) {
     }
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('filenest_subjects_updated', { detail: cleanMap }));
-    }
-    if (typeof fetch !== 'undefined') {
-      fetch('/api/curriculum-subjects', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ subjects: cleanMap })
-      }).catch((e) => console.warn('Could not sync subjects to server:', e?.message));
     }
   } catch (e) {
     console.warn("Storage save failed:", e);

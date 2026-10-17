@@ -129,7 +129,7 @@ export default function UploadBox({
       return;
     }
     try {
-      const updatedMap = await addSubjectToSupabase(semester, trimmed, true);
+      const updatedMap = await addSubjectToSupabase(semester, trimmed, true, subjectsBySemester);
       if (onSubjectsUpdated) onSubjectsUpdated(updatedMap);
       setSubject(trimmed);
       setCustomSubjectInput('');

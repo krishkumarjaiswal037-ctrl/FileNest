@@ -131,7 +131,7 @@ export default function Footer({ onOpenSqlModal }) {
 
         <div className="pt-6 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-slate-500 dark:text-slate-400">
           <p>
-            Made with love by <span className="font-semibold text-slate-800 dark:text-slate-200">{developerConfig.name}</span>
+            Developed by <span className="font-semibold text-slate-800 dark:text-slate-200">{developerConfig.name}</span>
           </p>
           <p className="tabular-nums">
             &copy; {currentYear} FileNest · B.Tech CSE Academic Repository. All rights reserved.

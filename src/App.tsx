@@ -59,7 +59,7 @@ export default function App() {
     getSubjectsBySemester()
   );
 
-  // Synchronize subjects whenever updated anywhere across the app or on another device
+  // Real-time synchronization for subjects & files across all devices and visitors
   useEffect(() => {
     const handleSubjectsChange = (e: any) => {
       if (e.detail && typeof e.detail === 'object') {
@@ -68,8 +68,8 @@ export default function App() {
     };
     window.addEventListener('filenest_subjects_updated', handleSubjectsChange);
 
-    // Periodically sync subjects from shared cloud storage so friends & all devices see updates
-    const syncCloudSubjects = async () => {
+    // Sync subjects & files from Supabase so all visitors and friends see real-time updates
+    const syncCloudData = async () => {
       try {
         const cloud = await fetchSubjectsFromSupabase();
         if (cloud && typeof cloud === 'object') {
@@ -78,18 +78,39 @@ export default function App() {
       } catch {
         // non-blocking
       }
+
+      try {
+        const remoteFiles = await fetchAllFiles();
+        if (Array.isArray(remoteFiles) && remoteFiles.length >= 0) {
+          setFiles((prev) => {
+            // Only update state if IDs changed or count changed to avoid re-render flicker
+            const prevIds = prev.map((f) => f.id).join(',');
+            const nextIds = remoteFiles.map((f) => f.id).join(',');
+            return prevIds !== nextIds ? remoteFiles : prev;
+          });
+        }
+      } catch {
+        // non-blocking
+      }
     };
 
-    const handleWindowFocus = () => {
-      syncCloudSubjects();
+    // Run immediately on mount
+    syncCloudData();
+
+    const handleWindowActive = () => {
+      if (document.visibilityState === 'visible') {
+        syncCloudData();
+      }
     };
 
-    window.addEventListener('focus', handleWindowFocus);
-    const interval = setInterval(syncCloudSubjects, 15000);
+    window.addEventListener('focus', handleWindowActive);
+    document.addEventListener('visibilitychange', handleWindowActive);
+    const interval = setInterval(syncCloudData, 6000);
 
     return () => {
       window.removeEventListener('filenest_subjects_updated', handleSubjectsChange);
-      window.removeEventListener('focus', handleWindowFocus);
+      window.removeEventListener('focus', handleWindowActive);
+      document.removeEventListener('visibilitychange', handleWindowActive);
       clearInterval(interval);
     };
   }, []);

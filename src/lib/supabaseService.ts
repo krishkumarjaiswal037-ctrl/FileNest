@@ -471,7 +471,7 @@ export async function syncLocalFilesToSupabase(): Promise<{
  * - Does NOT trigger automatic mock insertions on refresh.
  */
 export async function fetchAllFiles(): Promise<any[]> {
-  if (isSupabaseConfigured && supabase && cachedTableReady !== false) {
+  if (isSupabaseConfigured && supabase) {
     try {
       const { data, error } = await supabase
         .from(activeFilesTableName)
@@ -835,8 +835,30 @@ export async function saveSubjectsToSupabase(
   // 1. Save to local storage & broadcast event immediately
   saveAllSubjectsMap(cleanMap);
 
-  // 2. Persist directly to shared server storage (/api/curriculum-subjects)
-  // This guarantees ANY device, visitor, or friend immediately sees the change!
+  // 2. Persist directly to Supabase Storage bucket (PUBLIC & SHARED TO ALL FRIENDS & DEVICES)
+  if (isSupabaseConfigured && supabase) {
+    try {
+      const jsonContent = JSON.stringify(cleanMap, null, 2);
+      // Remove first to avoid 403 AccessDenied on upsert policy
+      try {
+        await supabase.storage.from(STORAGE_BUCKET).remove([CURRICULUM_CLOUD_FILE]);
+      } catch {
+        // ignore remove error
+      }
+      const { error: upErr } = await supabase.storage
+        .from(STORAGE_BUCKET)
+        .upload(CURRICULUM_CLOUD_FILE, jsonContent, {
+          contentType: 'application/json'
+        });
+      if (upErr) {
+        console.warn('Supabase storage upload notice:', upErr.message);
+      }
+    } catch (err: any) {
+      console.warn('Supabase storage subject sync notice:', err?.message);
+    }
+  }
+
+  // 3. Persist directly to shared server storage (/api/curriculum-subjects)
   try {
     const res = await fetch('/api/curriculum-subjects', {
       method: 'POST',
@@ -850,39 +872,14 @@ export async function saveSubjectsToSupabase(
     console.warn('Server subjects persist notice:', apiErr?.message);
   }
 
-  // 3. Best-effort sync to Supabase Storage bucket & subjects table
-  if (isSupabaseConfigured && supabase) {
-    try {
-      const jsonContent = JSON.stringify(cleanMap, null, 2);
-      await supabase.storage
-        .from(STORAGE_BUCKET)
-        .upload(CURRICULUM_CLOUD_FILE, jsonContent, {
-          contentType: 'application/json',
-          upsert: true
-        });
-    } catch (err: any) {
-      // non-blocking
-    }
-
-    try {
-      for (const sem of [1, 2, 3, 4, 5, 6, 7, 8]) {
-        for (const name of cleanMap[sem]) {
-          await supabase.from(SUBJECTS_TABLE).insert([{ semester: sem, name }]).select();
-        }
-      }
-    } catch {
-      // non-blocking
-    }
-  }
-
   return cleanMap;
 }
 
 /**
- * Fetch subjects strictly from shared cloud server storage and real uploaded files.
+ * Fetch subjects strictly from shared cloud Supabase storage, server, and uploaded files.
  * Synchronizes across all users, admins, and friends' devices.
  */
-export async function fetchSubjectsFromSupabase(): Promise<{ [semester: number]: string[] } | null> {
+export async function fetchSubjectsFromSupabase(): Promise<{ [semester: number]: string[] }> {
   const baseMap = (getSubjectsBySemester() || {}) as Record<number, string[]>;
   const currentClean: { [sem: number]: string[] } = {};
   for (let s = 1; s <= 8; s++) {
@@ -891,34 +888,13 @@ export async function fetchSubjectsFromSupabase(): Promise<{ [semester: number]:
 
   let cloudMap: { [sem: number]: string[] } | null = null;
 
-  // 1. Fetch from shared server storage (/api/curriculum-subjects)
-  try {
-    const res = await fetch('/api/curriculum-subjects');
-    if (res.ok) {
-      const data = await res.json();
-      if (data && data.subjects && typeof data.subjects === 'object') {
-        cloudMap = {};
-        for (let s = 1; s <= 8; s++) {
-          cloudMap[s] = Array.isArray(data.subjects[s])
-            ? Array.from(new Set(data.subjects[s].map((x: any) => String(x).trim()).filter(Boolean)))
-            : [];
-        }
-      }
-    }
-  } catch (apiErr: any) {
-    console.warn('Notice fetching /api/curriculum-subjects:', apiErr?.message);
-  }
-
-  // 2. Fallback check from Supabase Storage if server returned empty
-  if (!cloudMap && isSupabaseConfigured && supabase) {
+  // 1. Fetch directly from authoritative Supabase Cloud Storage (public URL + cache-busting)
+  if (isSupabaseConfigured) {
     try {
-      const { data, error } = await supabase.storage
-        .from(STORAGE_BUCKET)
-        .download(CURRICULUM_CLOUD_FILE);
-
-      if (!error && data) {
-        const text = await data.text();
-        const parsed = JSON.parse(text);
+      const cloudUrl = `${supabaseUrl}/storage/v1/object/public/${STORAGE_BUCKET}/${CURRICULUM_CLOUD_FILE}?t=${Date.now()}`;
+      const res = await fetch(cloudUrl);
+      if (res.ok) {
+        const parsed = await res.json();
         if (parsed && typeof parsed === 'object') {
           cloudMap = {};
           for (let s = 1; s <= 8; s++) {
@@ -928,8 +904,52 @@ export async function fetchSubjectsFromSupabase(): Promise<{ [semester: number]:
           }
         }
       }
-    } catch (dlErr: any) {
-      console.warn('Supabase storage download notice:', dlErr?.message);
+    } catch (pubErr: any) {
+      console.warn('Supabase public storage fetch notice:', pubErr?.message);
+    }
+
+    // Fallback: SDK download if fetch was not ok
+    if (!cloudMap && supabase) {
+      try {
+        const { data, error } = await supabase.storage
+          .from(STORAGE_BUCKET)
+          .download(CURRICULUM_CLOUD_FILE);
+
+        if (!error && data) {
+          const text = await data.text();
+          const parsed = JSON.parse(text);
+          if (parsed && typeof parsed === 'object') {
+            cloudMap = {};
+            for (let s = 1; s <= 8; s++) {
+              cloudMap[s] = Array.isArray(parsed[s])
+                ? Array.from(new Set(parsed[s].map((x: any) => String(x).trim()).filter(Boolean)))
+                : [];
+            }
+          }
+        }
+      } catch (dlErr: any) {
+        console.warn('Supabase storage SDK download notice:', dlErr?.message);
+      }
+    }
+  }
+
+  // 2. Check shared server storage (/api/curriculum-subjects) if cloud storage was unreachable
+  if (!cloudMap) {
+    try {
+      const res = await fetch('/api/curriculum-subjects');
+      if (res.ok) {
+        const data = await res.json();
+        if (data && data.subjects && typeof data.subjects === 'object') {
+          cloudMap = {};
+          for (let s = 1; s <= 8; s++) {
+            cloudMap[s] = Array.isArray(data.subjects[s])
+              ? Array.from(new Set(data.subjects[s].map((x: any) => String(x).trim()).filter(Boolean)))
+              : [];
+          }
+        }
+      }
+    } catch (apiErr: any) {
+      console.warn('Notice fetching /api/curriculum-subjects:', apiErr?.message);
     }
   }
 
@@ -959,24 +979,21 @@ export async function fetchSubjectsFromSupabase(): Promise<{ [semester: number]:
     }
   }
 
-  // If cloudMap was retrieved, save locally and return
-  if (cloudMap) {
-    saveAllSubjectsMap(cloudMap);
-    return cloudMap;
-  }
-
-  return currentClean;
+  const finalMap = cloudMap || currentClean;
+  saveAllSubjectsMap(finalMap);
+  return finalMap;
 }
 
 export async function addSubjectToSupabase(
   semester: number,
   subjectName: string,
-  isAdmin = false
+  isAdmin = false,
+  currentMap?: Record<number, string[]>
 ): Promise<{ [semester: number]: string[] }> {
   const clean = subjectName.trim();
   if (!clean) throw new Error('Subject name cannot be empty.');
 
-  const current = (getSubjectsBySemester() || {}) as Record<number, string[]>;
+  const current = (currentMap || getSubjectsBySemester() || {}) as Record<number, string[]>;
   const semList = current[Number(semester)] || [];
   if (!semList.includes(clean)) {
     const updatedMap = {
@@ -991,10 +1008,11 @@ export async function addSubjectToSupabase(
 export async function deleteSubjectFromSupabase(
   semester: number,
   subjectName: string,
-  isAdmin = false
+  isAdmin = false,
+  currentMap?: Record<number, string[]>
 ): Promise<{ [semester: number]: string[] }> {
   const clean = subjectName.trim().toLowerCase();
-  const current = (getSubjectsBySemester() || {}) as Record<number, string[]>;
+  const current = (currentMap || getSubjectsBySemester() || {}) as Record<number, string[]>;
   const semList = current[Number(semester)] || [];
   const nextList = semList.filter((s: string) => s.trim().toLowerCase() !== clean);
   const updatedMap = {
@@ -1011,17 +1029,18 @@ export async function renameSubjectInSupabase(
   semester: number,
   oldSubject: string,
   newSubject: string,
-  isAdmin = false
+  isAdmin = false,
+  currentMap?: Record<number, string[]>
 ): Promise<{ [semester: number]: string[] }> {
   const cleanOld = oldSubject.trim();
   const cleanNew = newSubject.trim();
 
   if (!cleanNew) throw new Error('New subject name cannot be empty.');
   if (cleanOld.toLowerCase() === cleanNew.toLowerCase()) {
-    return (getSubjectsBySemester() || {}) as Record<number, string[]>;
+    return (currentMap || getSubjectsBySemester() || {}) as Record<number, string[]>;
   }
 
-  const current = (getSubjectsBySemester() || {}) as Record<number, string[]>;
+  const current = (currentMap || getSubjectsBySemester() || {}) as Record<number, string[]>;
   const semList = current[Number(semester)] || [];
   const nextList = semList.map((s: string) => (s.trim().toLowerCase() === cleanOld.toLowerCase() ? cleanNew : s));
 

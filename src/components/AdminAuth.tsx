@@ -54,9 +54,29 @@ export default function AdminAuth({ onLoginSuccess, notify }: AdminAuthProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  // Sync registered accounts list
-  const refreshAccounts = () => {
-    setRegisteredAccounts(getRegisteredAdminAccounts());
+  // Sync registered accounts list from local storage and cloud server
+  const refreshAccounts = async () => {
+    const local = getRegisteredAdminAccounts();
+    setRegisteredAccounts(local);
+
+    try {
+      const res = await fetch('/api/admin/accounts');
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data.accounts) && data.accounts.length > 0) {
+          const map = new Map();
+          local.forEach((a) => map.set(a.email.toLowerCase(), a));
+          data.accounts.forEach((a: any) => {
+            if (a.email) {
+              map.set(a.email.toLowerCase(), a);
+            }
+          });
+          setRegisteredAccounts(Array.from(map.values()));
+        }
+      }
+    } catch {
+      // offline fallback
+    }
   };
 
   useEffect(() => {

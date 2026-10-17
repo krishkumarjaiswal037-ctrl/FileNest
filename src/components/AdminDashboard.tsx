@@ -95,13 +95,13 @@ export default function AdminDashboard({
 
     setIsAddingSubject(true);
     try {
-      const updated = await addSubjectToSupabase(editingSemester, trimmed, true);
+      const updated = await addSubjectToSupabase(editingSemester, trimmed, true, subjectsBySemester);
       if (onSubjectsUpdated) {
         onSubjectsUpdated(updated);
       }
       setNewSubjectInput('');
       notify(
-        `Added "${trimmed}" to Semester ${editingSemester}. Saved to cloud and visible across all devices!`,
+        `Added "${trimmed}" to Semester ${editingSemester}. Saved to Supabase cloud and visible across all devices!`,
         'success'
       );
     } catch (err: any) {
@@ -113,7 +113,7 @@ export default function AdminDashboard({
 
   const handleDeleteSubject = async (subjName: string) => {
     try {
-      const updated = await deleteSubjectFromSupabase(editingSemester, subjName, true);
+      const updated = await deleteSubjectFromSupabase(editingSemester, subjName, true, subjectsBySemester);
       if (onSubjectsUpdated) {
         onSubjectsUpdated(updated);
       }
@@ -161,7 +161,8 @@ export default function AdminDashboard({
         editingSemester,
         editingSubject.oldName,
         cleanNew,
-        true
+        true,
+        subjectsBySemester
       );
       if (onSubjectsUpdated) {
         onSubjectsUpdated(updated);

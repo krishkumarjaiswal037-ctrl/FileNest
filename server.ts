@@ -1,6 +1,7 @@
 import express from 'express';
 import path from 'path';
 import fs from 'fs';
+import crypto from 'crypto';
 import { fileURLToPath } from 'url';
 import { createServer as createViteServer } from 'vite';
 import { GoogleGenAI, GenerateVideosOperation } from '@google/genai';
@@ -317,6 +318,61 @@ app.get('/api/admin/accounts', (_req, res) => {
     lastLoginAt: a.lastLoginAt
   }));
   return res.json({ accounts: publicList, total: publicList.length });
+});
+
+/**
+ * POST /api/admin/login
+ * Validates credentials against registered administrator accounts on server
+ */
+app.post('/api/admin/login', (req, res) => {
+  const { identifier, password } = req.body;
+  if (!identifier || !password) {
+    return res.status(400).json({ error: 'Admin email/username and password are required.' });
+  }
+
+  const cleanId = String(identifier).trim().toLowerCase();
+  const accounts = readServerAdminAccounts();
+
+  const match = accounts.find(
+    (a) => a.username?.toLowerCase() === cleanId || a.email?.toLowerCase() === cleanId
+  );
+
+  if (!match) {
+    if (accounts.length === 0) {
+      return res.status(401).json({
+        error: 'No administrator accounts registered yet on server. Please use "Register Another Admin" to register your email and password.'
+      });
+    }
+    return res.status(401).json({
+      error: `No administrator account found for "${identifier}". You can register this email in the "Register Another Admin" tab.`
+    });
+  }
+
+  try {
+    const computedHash = crypto
+      .pbkdf2Sync(String(password), Buffer.from(match.saltHex, 'hex'), 100000, 32, 'sha256')
+      .toString('hex');
+
+    if (computedHash !== match.hashHex) {
+      return res.status(401).json({ error: 'Incorrect password. Please verify your credentials and try again.' });
+    }
+
+    match.lastLoginAt = new Date().toISOString();
+    writeServerAdminAccounts(accounts);
+
+    const session = {
+      username: match.username,
+      email: match.email,
+      fullName: match.fullName,
+      loginTime: new Date().toISOString(),
+      token: `fn_adm_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`
+    };
+
+    return res.json({ success: true, session, account: match });
+  } catch (err: any) {
+    console.error('Login hash verification error:', err);
+    return res.status(500).json({ error: 'Internal error verifying credentials.' });
+  }
 });
 
 /**

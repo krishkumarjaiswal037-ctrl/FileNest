@@ -258,58 +258,87 @@ export async function loginAdmin({
   const cleanId = identifier.trim().toLowerCase();
   let accounts = getStoredAdminAccounts();
 
-  // Try finding account locally
+  // 1. Try finding account and verifying password locally first
   let matchAccount = accounts.find(
     (a) => a.username.toLowerCase() === cleanId || a.email.toLowerCase() === cleanId
   );
 
-  // If not found locally, try checking server accounts
-  if (!matchAccount) {
+  if (matchAccount) {
     try {
-      const res = await fetch('/api/admin/accounts');
-      if (res.ok) {
-        // accounts public list loaded
+      const salt = hexToBuffer(matchAccount.saltHex);
+      const computedHash = await hashPassword(password, salt);
+      if (computedHash === matchAccount.hashHex) {
+        matchAccount.lastLoginAt = new Date().toISOString();
+        saveStoredAdminAccounts(accounts);
+
+        const session: AdminSession = {
+          username: matchAccount.username,
+          email: matchAccount.email,
+          fullName: matchAccount.fullName,
+          loginTime: new Date().toISOString(),
+          token: `fn_adm_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`
+        };
+
+        localStorage.setItem(ADMIN_SESSION_KEY, JSON.stringify(session));
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('filenest_admin_session_change', { detail: session }));
+        }
+        return session;
       }
     } catch {
-      // offline
+      // local hash comparison error, proceed to server check
     }
   }
 
-  if (!matchAccount) {
-    if (accounts.length === 0) {
-      throw new Error(
-        'No administrator accounts found. Please register your admin email and password in the Register tab.'
-      );
+  // 2. Try server-side verification via /api/admin/login (essential for other devices/emails)
+  try {
+    const res = await fetch('/api/admin/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ identifier: cleanId, password })
+    });
+
+    if (res.ok) {
+      const data = await res.json();
+      if (data && data.session) {
+        const session: AdminSession = data.session;
+        localStorage.setItem(ADMIN_SESSION_KEY, JSON.stringify(session));
+
+        // If server provided full account details, cache locally for offline access
+        if (data.account && data.account.hashHex) {
+          const current = getStoredAdminAccounts();
+          const filtered = current.filter(
+            (a) =>
+              a.username.toLowerCase() !== data.account.username.toLowerCase() &&
+              a.email.toLowerCase() !== data.account.email.toLowerCase()
+          );
+          saveStoredAdminAccounts([data.account, ...filtered]);
+        }
+
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('filenest_admin_session_change', { detail: session }));
+        }
+        return session;
+      }
+    } else {
+      const errData = await res.json().catch(() => null);
+      if (errData?.error) {
+        throw new Error(errData.error);
+      }
     }
-    throw new Error(
-      `No administrator account found for "${identifier}". You can register this email in the "Register Admin" tab.`
-    );
+  } catch (netErr: any) {
+    if (netErr?.message && !netErr.message.includes('fetch')) {
+      throw netErr;
+    }
   }
 
-  const salt = hexToBuffer(matchAccount.saltHex);
-  const computedHash = await hashPassword(password, salt);
-
-  if (computedHash !== matchAccount.hashHex) {
-    throw new Error('Incorrect password. Please verify your password and try again.');
+  if (matchAccount) {
+    throw new Error('Incorrect password. Please verify your credentials and try again.');
   }
 
-  // Update last login timestamp
-  matchAccount.lastLoginAt = new Date().toISOString();
-  saveStoredAdminAccounts(accounts);
-
-  const session: AdminSession = {
-    username: matchAccount.username,
-    email: matchAccount.email,
-    fullName: matchAccount.fullName,
-    loginTime: new Date().toISOString(),
-    token: `fn_adm_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`
-  };
-
-  localStorage.setItem(ADMIN_SESSION_KEY, JSON.stringify(session));
-  if (typeof window !== 'undefined') {
-    window.dispatchEvent(new CustomEvent('filenest_admin_session_change', { detail: session }));
-  }
-  return session;
+  throw new Error(
+    `No administrator account found for "${identifier}". You can register this email in the "Register Another Admin" tab.`
+  );
 }
 
 /**
