@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { Link } from 'react-router-dom';
 import {
   UploadCloud,
@@ -7,100 +7,18 @@ import {
   Image as ImageIcon,
   BookOpen,
   Star,
-  ArrowRight,
-  Lightbulb,
-  Sparkles,
-  RefreshCw,
-  Copy,
-  Check,
-  Timer
+  ArrowRight
 } from 'lucide-react';
 import { formatFileSize } from '../lib/supabaseService';
-
-// Curated high-impact B.Tech CSE Study Ideas & Strategies
-const STUDY_IDEAS = [
-  {
-    id: 1,
-    tag: '🎯 Exam Strategy',
-    title: 'The 80/20 PYQ Analysis',
-    desc: 'Review the last 4 years of university question papers first. Over 70% of 10-mark theory questions revolve around recurring core syllabus concepts.',
-    actionLabel: 'Browse PYQ Papers',
-    actionLink: '/library'
-  },
-  {
-    id: 2,
-    tag: '🧠 Concept Retention',
-    title: 'Feynman Technique on Whiteboard',
-    desc: 'Stuck on OS Paging, DBMS Normalization, or Network Handshakes? Explain it aloud in simple everyday terms as if teaching a first-year student.',
-    actionLabel: 'Review Vault Notes',
-    actionLink: '/library'
-  },
-  {
-    id: 3,
-    tag: '💻 Coding & DSA',
-    title: 'Dry-Run on Paper Before IDE',
-    desc: 'Trace pointer manipulations, recursion stacks, and tree traversals manually on paper with sample inputs before writing code.',
-    actionLabel: 'Placement Checklist',
-    actionLink: '/tools'
-  },
-  {
-    id: 4,
-    tag: '⏱️ Deep Focus',
-    title: '25/5 Pomodoro Study Blocks',
-    desc: 'Tackle heavy theory or coding assignments in 25-minute distraction-free focus bursts followed by 5-minute cognitive rests.',
-    actionLabel: 'Launch Pomodoro Timer',
-    actionLink: '/tools'
-  },
-  {
-    id: 5,
-    tag: '📝 Rapid Revision',
-    title: '1-Page Unit Cheat Sheet',
-    desc: 'After reading a lecture PDF, summarize all definitions, formulas, and complexity tables onto a single A4 sheet for morning-of-exam review.',
-    actionLabel: 'Open Study Planner',
-    actionLink: '/tools'
-  },
-  {
-    id: 6,
-    tag: '🔬 Lab & Viva Prep',
-    title: 'Peer Reverse-Viva Drills',
-    desc: 'Partner with a classmate and take turns asking 5 unexpected viva questions straight from the lab manuals and experiment codes.',
-    actionLabel: 'Browse Lab Manuals',
-    actionLink: '/library'
-  },
-  {
-    id: 7,
-    tag: '📊 Spaced Repetition',
-    title: 'Day 1-3-7 Review Cadence',
-    desc: 'Review lecture notes on the day taught, then briefly on Day 3 and Day 7. This cements high-density engineering theory into long-term memory.',
-    actionLabel: 'Upload New Notes',
-    actionLink: '/upload'
-  }
-];
 
 /**
  * Hero Section Component (src/components/Hero.jsx)
  * Clean B.Tech CSE styling with:
- * - Interactive "Study Idea" spotlight with shuffle, copy, and tools shortcuts
  * - Live Supabase database statistics
  * - Quick upload and library browsing actions
+ * - Fast preview card for recent study files
  */
 export default function Hero({ files = [], subjectsBySemester = {}, onOpenPreview }) {
-  const [currentIdeaIndex, setCurrentIdeaIndex] = useState(0);
-  const [copiedIdea, setCopiedIdea] = useState(false);
-
-  const activeIdea = STUDY_IDEAS[currentIdeaIndex];
-
-  const handleNextIdea = () => {
-    setCurrentIdeaIndex((prev) => (prev + 1) % STUDY_IDEAS.length);
-    setCopiedIdea(false);
-  };
-
-  const handleCopyIdea = () => {
-    navigator.clipboard.writeText(`Study Idea (${activeIdea.tag}): ${activeIdea.title} — ${activeIdea.desc}`);
-    setCopiedIdea(true);
-    setTimeout(() => setCopiedIdea(false), 2000);
-  };
-
   const totalPdfs = files.filter((f) => f.file_type === 'pdf').length;
   const totalPhotos = files.filter((f) => f.file_type === 'image').length;
   const favoritesCount = files.filter((f) => f.is_favorite).length;
@@ -123,71 +41,7 @@ export default function Hero({ files = [], subjectsBySemester = {}, onOpenPrevie
         className="pointer-events-none absolute inset-0 opacity-10 bg-[linear-gradient(to_right,#ffffff_1px,transparent_1px),linear-gradient(to_bottom,#ffffff_1px,transparent_1px)] bg-[size:3.5rem_3.5rem]"
       />
 
-      <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-10 pb-14 lg:pt-14 lg:pb-16">
-        {/* Interactive Study Idea Spotlight Banner */}
-        <div className="mb-8 p-3 sm:p-4 rounded-2xl bg-white/10 backdrop-blur-md border border-white/20 shadow-lg">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <div className="flex items-start sm:items-center gap-3 min-w-0">
-              <div className="w-9 h-9 rounded-xl bg-white/20 flex items-center justify-center shrink-0 text-amber-300">
-                <Lightbulb className="w-5 h-5" />
-              </div>
-              <div className="min-w-0">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className="text-[11px] font-semibold uppercase tracking-wider text-blue-200">
-                    💡 Study Idea #{activeIdea.id}
-                  </span>
-                  <span className="px-2 py-0.5 rounded-md bg-white/15 text-[11px] font-medium text-white">
-                    {activeIdea.tag}
-                  </span>
-                </div>
-                <p className="text-sm font-semibold text-white mt-0.5 truncate">
-                  {activeIdea.title}: <span className="font-normal text-blue-100">{activeIdea.desc}</span>
-                </p>
-              </div>
-            </div>
-
-            {/* Idea Controls: Shuffle, Copy, Link */}
-            <div className="flex items-center gap-2 shrink-0 self-end sm:self-center">
-              <button
-                type="button"
-                onClick={handleCopyIdea}
-                title="Copy study idea"
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/15 hover:bg-white/25 text-xs font-medium text-white transition-colors"
-              >
-                {copiedIdea ? (
-                  <>
-                    <Check className="w-3.5 h-3.5 text-emerald-300" />
-                    <span>Copied!</span>
-                  </>
-                ) : (
-                  <>
-                    <Copy className="w-3.5 h-3.5" />
-                    <span>Copy</span>
-                  </>
-                )}
-              </button>
-
-              <button
-                type="button"
-                onClick={handleNextIdea}
-                title="Get another study idea"
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white text-[#1E3A8A] hover:bg-blue-50 text-xs font-semibold shadow-xs transition-colors"
-              >
-                <RefreshCw className="w-3.5 h-3.5" />
-                <span>Next Idea</span>
-              </button>
-
-              <Link
-                to={activeIdea.actionLink}
-                className="hidden md:inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-xs font-medium text-blue-100 transition-colors"
-              >
-                <span>{activeIdea.actionLabel}</span>
-                <ArrowRight className="w-3 h-3" />
-              </Link>
-            </div>
-          </div>
-        </div>
-
+      <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-12 pb-14 lg:pt-16 lg:pb-18">
         {/* 2-Column Split with items-stretch */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 lg:gap-12 items-stretch">
           {/* Left Column: Primary Copy & Actions */}
